@@ -50,17 +50,17 @@
 
 ```bash
 # curl দিয়ে এক ক্লিকে ইনস্টল করুন
-curl -sSL https://raw.githubusercontent.com/dotnetbd/NetFusion-Framework/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/dotnetbdinfosys/NetFusion-Framework/main/install.sh | bash
 
 # অথবা wget ব্যবহার করতে চাইলে
-wget -qO- https://raw.githubusercontent.com/dotnetbd/NetFusion-Framework/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/dotnetbdinfosys/NetFusion-Framework/main/install.sh | bash
 ```
 
 ### খ. GitHub Clone করার পর ইনস্টলেশন:
 যদি রিপোজিটরিটি ম্যানুয়ালি গিট ক্লোন করা হয়ে থাকে:
 
 ```bash
-git clone https://github.com/dotnetbd/NetFusion-Framework.git /var/www/netfusion
+git clone https://github.com/dotnetbdinfosys/NetFusion-Framework.git /var/www/netfusion
 cd /var/www/netfusion
 chmod +x install.sh
 ./install.sh

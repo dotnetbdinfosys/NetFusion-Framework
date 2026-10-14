@@ -23,7 +23,7 @@ COLOR_BLUE="\033[34m"
 COLOR_MAGENTA="\033[35m"
 
 # Default Repository Configuration
-REPO_URL="${NETFUSION_REPO:-https://github.com/dotnetbd/NetFusion-Framework.git}"
+REPO_URL="${NETFUSION_REPO:-https://github.com/dotnetbdinfosys/NetFusion-Framework.git}"
 BRANCH="${NETFUSION_BRANCH:-main}"
 
 clear 2>/dev/null || true
