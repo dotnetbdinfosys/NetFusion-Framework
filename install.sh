@@ -81,6 +81,14 @@ else
         cd "$INSTALL_DIR"
         git fetch origin "$BRANCH" 2>/dev/null || true
         git pull origin "$BRANCH" 2>/dev/null || true
+    elif [ -d "$INSTALL_DIR" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+        echo -e "${COLOR_CYAN}● Directory exists with existing files. Deploying NetFusion into target directory...${COLOR_RESET}"
+        cd "$INSTALL_DIR"
+        git init 2>/dev/null || true
+        git remote remove origin 2>/dev/null || true
+        git remote add origin "$REPO_URL" 2>/dev/null || true
+        git fetch origin "$BRANCH" --depth 1
+        git checkout -f -B "$BRANCH" "origin/$BRANCH"
     else
         echo -e "${COLOR_CYAN}● Cloning NetFusion Framework from GitHub (${BRANCH})...${COLOR_RESET}"
         mkdir -p "$INSTALL_DIR"
