@@ -45,17 +45,25 @@
 
 ## ২. সার্বজনীন এক-ক্লিক অটো-ইনস্টলার (Universal One-Click Installer)
 
-যেকোনো লিনাক্স সার্ভারে স্বয়ংক্রিয় ইনস্টলেশনের জন্য ফ্রেমওয়ার্কের ভেতরেই একটি ইনস্টলার স্ক্রিপ্ট রয়েছে:
+### ক. GitHub ওয়ান-লাইনার ইনস্টলেশন (Curl / Wget দিয়ে সরাসরি ইনস্টল):
+সরাসরি যেকোনো লিনাক্স সার্ভারে টার্মিনালে নিচের এক লাইনের কমান্ড রান করে সম্পূর্ণ ফ্রেমওয়ার্ক ক্লোন ও ইনস্টল করা যাবে:
 
 ```bash
-# রুট বা সুডো প্রিভিলেজ সহ ডিরেক্টরিতে যান
+# curl দিয়ে এক ক্লিকে ইনস্টল করুন
+curl -sSL https://raw.githubusercontent.com/dotnetbd/NetFusion-Framework/main/install.sh | bash
+
+# অথবা wget ব্যবহার করতে চাইলে
+wget -qO- https://raw.githubusercontent.com/dotnetbd/NetFusion-Framework/main/install.sh | bash
+```
+
+### খ. GitHub Clone করার পর ইনস্টলেশন:
+যদি রিপোজিটরিটি ম্যানুয়ালি গিট ক্লোন করা হয়ে থাকে:
+
+```bash
+git clone https://github.com/dotnetbd/NetFusion-Framework.git /var/www/netfusion
 cd /var/www/netfusion
-
-# স্ক্রিপ্টটিকে এক্সিকিউটেবল পারমিশন দিন
-chmod +x bin/install.sh
-
-# ইনস্টলার রান করুন
-./bin/install.sh
+chmod +x install.sh
+./install.sh
 ```
 
 **এই স্ক্রিপ্টটি স্বয়ংক্রিয়ভাবে যা করে:**
