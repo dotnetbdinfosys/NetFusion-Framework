@@ -1,0 +1,13 @@
+{
+    "name": "Billing Module",
+    "slug": "billing",
+    "version": "1.0.0",
+    "description": "Billing business module for NetFusion Framework",
+    "author": "Md. Atiquzzaman Ashish (DotNetBD)",
+    "enabled": true,
+    "priority": 100,
+    "providers": [
+        "NetFusion\\Modules\\Billing\\Providers\\BillingServiceProvider"
+    ],
+    "dependencies": []
+}

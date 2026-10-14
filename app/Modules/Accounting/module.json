@@ -1,0 +1,12 @@
+{
+  "name": "Accounting",
+  "slug": "accounting",
+  "version": "1.0.0",
+  "description": "Enterprise Double-Entry Financial Accounting, Chart of Accounts, Journal Entries, and Financial Statements",
+  "author": "Md. Atiquzzaman Ashish (DotNetBD)",
+  "enabled": true,
+  "priority": 20,
+  "providers": [
+    "NetFusion\\Modules\\Accounting\\Providers\\AccountingServiceProvider"
+  ]
+}

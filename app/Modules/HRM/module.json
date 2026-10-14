@@ -1,0 +1,17 @@
+{
+  "name": "HRM & Payroll Engine",
+  "slug": "hrm",
+  "version": "1.0.0",
+  "description": "Enterprise Human Resource Management and Multi-Tenant Automated Payroll Module for NetFusion Framework.",
+  "author": "Md. Atiquzzaman Ashish",
+  "company": "DotNetBD",
+  "website": "www.dotnetbd.com",
+  "license": "MIT",
+  "namespace": "NetFusion\\Modules\\HRM",
+  "providers": [
+    "NetFusion\\Modules\\HRM\\Providers\\HRMServiceProvider"
+  ],
+  "dependencies": ["system"],
+  "priority": 15,
+  "enabled": true
+}

@@ -1,0 +1,20 @@
+# ==============================================================================
+# NetFusion Framework — Systemd Scheduler Timer (Runs Every Minute)
+# Path   : /etc/systemd/system/netfusion-scheduler.timer
+# Commands:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now netfusion-scheduler.timer
+#   sudo systemctl list-timers
+# Author : Md. Atiquzzaman Ashish (DotNetBD)
+# ==============================================================================
+
+[Unit]
+Description=Run NetFusion Framework Scheduled Tasks Every Minute
+
+[Timer]
+OnCalendar=*:0/1
+Persistent=true
+Unit=netfusion-scheduler.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+{
+    "name": "CRM",
+    "slug": "crm",
+    "version": "1.0.0",
+    "description": "Enterprise CRM, Lead Pipeline & Customer Support Helpdesk Module for NetFusion Framework",
+    "author": "Md. Atiquzzaman Ashish (DotNetBD)",
+    "providers": [
+        "NetFusion\\Modules\\CRM\\Providers\\CrmServiceProvider"
+    ],
+    "autoload": {
+        "psr-4": {
+            "NetFusion\\Modules\\CRM\\": ""
+        }
+    },
+    "dependencies": [
+        "System"
+    ],
+    "active": true
+}

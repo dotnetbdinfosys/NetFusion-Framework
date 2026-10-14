@@ -1,0 +1,86 @@
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # --------------------------------------------------------------------------
+    # Security: Block direct access to sensitive directories and files
+    # --------------------------------------------------------------------------
+
+    # Block access to .env and environment files
+    RewriteRule ^\.env(.*)$               - [F,L]
+    RewriteRule ^\.env\.(.*)$             - [F,L]
+
+    # Block access to the core/, app/, config/ directories
+    RewriteRule ^(core|app|config|storage|database|tests)/  - [F,L]
+
+    # Block access to composer files
+    RewriteRule ^composer\.(json|lock)$   - [F,L]
+
+    # Block dot-files (git, htpasswd, etc.)
+    RewriteRule (^|/)\..+                 - [F,L]
+
+    # --------------------------------------------------------------------------
+    # Route all non-existent requests to the Front Controller (index.php)
+    # --------------------------------------------------------------------------
+
+    # Allow direct access to real files and directories (CSS, JS, images, etc.)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Redirect all other requests to public/index.php
+    RewriteRule ^(.*)$ index.php [QSA,L]
+
+</IfModule>
+
+# --------------------------------------------------------------------------
+# Disable server signature for security
+# --------------------------------------------------------------------------
+ServerSignature Off
+
+# --------------------------------------------------------------------------
+# Compression (GZIP) — improves page load performance
+# --------------------------------------------------------------------------
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+    AddOutputFilterByType DEFLATE application/json application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript text/javascript
+</IfModule>
+
+# --------------------------------------------------------------------------
+# Browser Caching — cache static assets for 1 year
+# --------------------------------------------------------------------------
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpg              "access plus 1 year"
+    ExpiresByType image/jpeg             "access plus 1 year"
+    ExpiresByType image/gif              "access plus 1 year"
+    ExpiresByType image/png              "access plus 1 year"
+    ExpiresByType image/webp             "access plus 1 year"
+    ExpiresByType image/svg+xml         "access plus 1 year"
+    ExpiresByType image/x-icon          "access plus 1 year"
+    ExpiresByType text/css              "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType application/x-javascript "access plus 1 month"
+    ExpiresByType text/javascript       "access plus 1 month"
+    ExpiresByType application/json      "access plus 0 seconds"
+</IfModule>
+
+# --------------------------------------------------------------------------
+# Security Headers
+# --------------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    # Uncomment for HTTPS environments:
+    # Header set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+</IfModule>
+
+# --------------------------------------------------------------------------
+# Disable directory listing
+# --------------------------------------------------------------------------
+Options -Indexes

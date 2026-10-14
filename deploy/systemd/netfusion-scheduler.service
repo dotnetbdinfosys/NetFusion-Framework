@@ -1,0 +1,18 @@
+# ==============================================================================
+# NetFusion Framework — Systemd Scheduler Service (Triggered by Timer)
+# Path   : /etc/systemd/system/netfusion-scheduler.service
+# Author : Md. Atiquzzaman Ashish (DotNetBD)
+# ==============================================================================
+
+[Unit]
+Description=NetFusion Framework Scheduled Cron Tasks Runner
+After=network.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/netfusion
+ExecStart=/usr/bin/php /var/www/netfusion/netfusion schedule:run
+StandardOutput=append:/var/www/netfusion/storage/logs/scheduler.log
+StandardError=append:/var/www/netfusion/storage/logs/scheduler.log

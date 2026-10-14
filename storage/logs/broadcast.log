@@ -1,0 +1,9 @@
+[2026-09-18 17:49:55] BROADCAST [ChatMessage] on channels [public-chat, private-user.42] payload: {"user":"Ashish","msg":"Hello"}
+[2026-09-18 17:49:55] BROADCAST [invoice.created] on channels [invoices, private-client.12] payload: {"invoice_id":7001,"amount":1250.5,"currency":"USD"}
+[2026-09-18 17:49:55] BROADCAST [MaintenanceWarning] on channels [system-alerts] payload: {"time":"10:00 PM"}
+[2026-09-18 17:50:57] BROADCAST [ChatMessage] on channels [public-chat, private-user.42] payload: {"user":"Ashish","msg":"Hello"}
+[2026-09-18 17:50:57] BROADCAST [invoice.created] on channels [invoices, private-client.12] payload: {"invoice_id":7001,"amount":1250.5,"currency":"USD"}
+[2026-09-18 17:50:57] BROADCAST [MaintenanceWarning] on channels [system-alerts] payload: {"time":"10:00 PM"}
+[2026-09-18 17:52:33] BROADCAST [ChatMessage] on channels [public-chat, private-user.42] payload: {"user":"Ashish","msg":"Hello"}
+[2026-09-18 17:52:33] BROADCAST [invoice.created] on channels [invoices, private-client.12] payload: {"invoice_id":7001,"amount":1250.5,"currency":"USD"}
+[2026-09-18 17:52:33] BROADCAST [MaintenanceWarning] on channels [system-alerts] payload: {"time":"10:00 PM"}

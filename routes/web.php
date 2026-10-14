@@ -1,0 +1,170 @@
+<?php
+
+declare(strict_types=1);
+
+/*
+|--------------------------------------------------------------------------
+| NetFusion  Framework
+|--------------------------------------------------------------------------
+|
+| File      : routes/web.php
+| Module    : Routing
+| Namespace : None (Global Web Routes)
+| Purpose   : Global web routes for browser interactions with middleware support.
+|
+| Author    : Md. Atiquzzaman Ashish
+| Company   : DotNetBD
+| Website   : www.dotnetbd.com
+| Copyright : © DotNetBD. All rights reserved.
+| License   : MIT
+| Version   : 1.0.0
+|
+|--------------------------------------------------------------------------
+*/
+
+/*
+|--------------------------------------------------------------------------
+| NetFusion  Framework
+|--------------------------------------------------------------------------
+|
+| File      : routes/web.php
+| Module    : Routing
+| Namespace : None (Global Web Routes)
+| Purpose   : Global web routes for browser interactions with middleware support.
+|
+| Author    : Md. Atiquzzaman Ashish
+| Company   : DotNetBD
+| Website   : www.dotnetbd.com
+| Copyright : © DotNetBD. All rights reserved.
+| License   : MIT
+| Version   : 1.0.0
+|
+|--------------------------------------------------------------------------
+*/
+
+/*
+|--------------------------------------------------------------------------
+| NetFusion  Framework
+|--------------------------------------------------------------------------
+|
+| File      : routes/web.php
+| Module    : Routing
+| Namespace : None (Global Web Routes)
+| Purpose   : Global web routes for browser interactions with middleware support.
+|
+| Author    : Md. Atiquzzaman Ashish
+| Company   : DotNetBD
+| Website   : www.dotnetbd.com
+| Copyright : © DotNetBD. All rights reserved.
+| License   : MIT
+| Version   : 1.0.0
+|
+|--------------------------------------------------------------------------
+*/
+
+use NetFusion\Core\Routing\Router;
+use NetFusion\Core\Http\Response;
+
+/**
+ * NetFusion Web Routes
+ *
+ * Define browser-facing routes here. These routes are automatically
+ * wrapped in the 'web' middleware group (Session, CSRF, etc.).
+ *
+ * Route files receive a $router variable (the Router instance).
+ *
+ * @var Router $router
+ */
+
+// ============================================================
+//  Framework Welcome Route
+// ============================================================
+
+$router->get('/', function () {
+    return Response::json([
+        'framework'   => 'NetFusion Framework',
+        'version'     => app()->version(),
+        'status'      => 'operational',
+        'environment' => app()->environment(),
+        'php_version' => PHP_VERSION,
+        'phase'       => 'Phase 2 — Routing & Middleware Engine ✓',
+        'diagnostics' => [
+            'boot_time_ms'   => app()->elapsedTime(),
+            'peak_memory_mb' => app()->peakMemory(),
+            'app_name'       => config('app.name'),
+            'timezone'       => config('app.timezone'),
+        ],
+        'endpoints' => [
+            'GET  /'           => 'This welcome page',
+            'GET  /health'     => 'Framework health check',
+            'GET  /about'      => 'About NetFusion',
+            'GET  /api/status' => 'API status (via api.php)',
+        ],
+    ]);
+})->name('home');
+
+// ============================================================
+//  Health Check
+// ============================================================
+
+$router->get('/health', function () {
+    return Response::json([
+        'status'  => 'healthy',
+        'uptime'  => app()->elapsedTime() . ' ms',
+        'memory'  => app()->peakMemory() . ' MB',
+        'time'    => now()->format('Y-m-d H:i:s T'),
+    ]);
+})->name('health');
+
+// ============================================================
+//  About NetFusion
+// ============================================================
+
+$router->get('/about', function () {
+    return Response::html(
+        '<h1>NetFusion Framework</h1>'
+        . '<p>A modern, high-performance, enterprise-grade HMVC framework for PHP 8.x.</p>'
+        . '<p>Version: ' . e(app()->version()) . '</p>'
+    );
+})->name('about');
+
+// ============================================================
+//  Demo: Route Parameters
+// ============================================================
+
+$router->get('/users/{id}', function (\NetFusion\Core\Http\Request $request) {
+    return Response::json([
+        'message' => 'User profile',
+        'user_id' => $request->route('id'),
+        'query'   => $request->query(),
+    ]);
+})->whereNumber('id')->name('users.show');
+
+// ============================================================
+//  Interactive Web Setup Wizard (Phase 23)
+// ============================================================
+
+$router->get('/install', [\NetFusion\App\Http\Controllers\InstallController::class, 'index'])->name('install.index');
+$router->post('/install/check-db', [\NetFusion\App\Http\Controllers\InstallController::class, 'checkDatabase'])->name('install.check_db');
+$router->post('/install/setup', [\NetFusion\App\Http\Controllers\InstallController::class, 'setup'])->name('install.setup');
+$router->get('/install/completed', [\NetFusion\App\Http\Controllers\InstallController::class, 'completed'])->name('install.completed');
+
+// ============================================================
+//  Unified Master Executive Dashboard (Phase 24)
+// ============================================================
+
+$router->group(['prefix' => 'admin', 'name' => 'admin.'], function (Router $r) {
+    $r->get('/dashboard', [\NetFusion\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+});
+
+$router->get('/api/v1/dashboard/metrics', [\NetFusion\App\Http\Controllers\DashboardController::class, 'metrics'])->name('api.dashboard.metrics');
+
+// ============================================================
+//  DotNetBD License CMS (API Engine v5.1.8) Web GUI
+// ============================================================
+
+$router->get('/license', [\NetFusion\App\Http\Controllers\LicenseController::class, 'index'])->name('license.index');
+$router->post('/license/activate', [\NetFusion\App\Http\Controllers\LicenseController::class, 'activate'])->name('license.activate');
+$router->post('/license/check', [\NetFusion\App\Http\Controllers\LicenseController::class, 'check'])->name('license.check');
+$router->post('/license/deactivate', [\NetFusion\App\Http\Controllers\LicenseController::class, 'deactivate'])->name('license.deactivate');
+

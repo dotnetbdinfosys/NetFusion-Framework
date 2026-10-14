@@ -1,0 +1,37 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+|--------------------------------------------------------------------------
+| NetFusion  Framework
+|--------------------------------------------------------------------------
+|
+| File      : netfusion
+| Module    : Console
+| Namespace : None (CLI Executable)
+| Purpose   : Root command-line executable for NetFusion Framework tasks.
+|
+| Author    : Md. Atiquzzaman Ashish
+| Company   : DotNetBD
+| Website   : www.dotnetbd.com
+| Copyright : © DotNetBD. All rights reserved.
+| License   : MIT
+| Version   : 1.0.0
+|
+|--------------------------------------------------------------------------
+*/
+
+define('NETFUSION_START', microtime(true));
+
+/** @var \NetFusion\Core\Application $app */
+$app = require __DIR__ . '/core/bootstrap.php';
+
+// Resolve console kernel
+/** @var \NetFusion\Core\Console\Kernel $kernel */
+$kernel = $app->make(\NetFusion\Core\Console\Kernel::class);
+
+$status = $kernel->handle($_SERVER['argv']);
+
+exit($status);

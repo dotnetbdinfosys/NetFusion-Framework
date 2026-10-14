@@ -1,0 +1,132 @@
+# ==============================================================================
+# NetFusion Framework — Production Docker Compose Orchestration
+# Author: Md. Atiquzzaman Ashish (DotNetBD)
+# Website: www.dotnetbd.com
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # 1. PHP-FPM Application Kernel
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: netfusion-app:latest
+    container_name: netfusion_app
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_DEBUG: 'false'
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-netfusion}
+      DB_USERNAME: ${DB_USERNAME:-netfusion_user}
+      DB_PASSWORD: ${DB_PASSWORD:-secret_netfusion_pwd}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_STORE: redis
+      QUEUE_DRIVER: database
+    volumes:
+      - .:/var/www/html
+      - storage_data:/var/www/html/storage
+    depends_on:
+      - db
+      - redis
+    networks:
+      - netfusion-net
+
+  # 2. Nginx Web Server / Reverse Proxy
+  web:
+    image: nginx:1.25-alpine
+    container_name: netfusion_web
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - .:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - storage_data:/var/www/html/storage:ro
+    depends_on:
+      - app
+    networks:
+      - netfusion-net
+
+  # 3. Primary Relational Database (MariaDB 11)
+  db:
+    image: mariadb:11.2
+    container_name: netfusion_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-netfusion}
+      MYSQL_USER: ${DB_USERNAME:-netfusion_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secret_netfusion_pwd}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret_pwd}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - netfusion-net
+
+  # 4. In-Memory Key-Value Cache & Session Store (Redis 7)
+  redis:
+    image: redis:7-alpine
+    container_name: netfusion_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - netfusion-net
+
+  # 5. Background Queue Worker Daemon
+  queue:
+    image: netfusion-app:latest
+    container_name: netfusion_queue
+    restart: unless-stopped
+    command: ["php", "netfusion", "queue:work", "--queue=default,emails,webhooks", "--sleep=3", "--tries=3"]
+    environment:
+      APP_ENV: production
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      REDIS_HOST: redis
+    volumes:
+      - .:/var/www/html
+      - storage_data:/var/www/html/storage
+    depends_on:
+      - app
+      - db
+    networks:
+      - netfusion-net
+
+  # 6. Scheduled Tasks / Cron Runner
+  scheduler:
+    image: netfusion-app:latest
+    container_name: netfusion_scheduler
+    restart: unless-stopped
+    entrypoint: ["sh", "-c", "while true; do php /var/www/html/netfusion schedule:run --verbose; sleep 60; done"]
+    environment:
+      APP_ENV: production
+      DB_CONNECTION: mysql
+      DB_HOST: db
+    volumes:
+      - .:/var/www/html
+      - storage_data:/var/www/html/storage
+    depends_on:
+      - app
+      - db
+    networks:
+      - netfusion-net
+
+networks:
+  netfusion-net:
+    driver: bridge
+
+volumes:
+  db_data:
+    driver: local
+  redis_data:
+    driver: local
+  storage_data:
+    driver: local

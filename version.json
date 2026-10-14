@@ -1,0 +1,17 @@
+{
+  "name": "NetFusion Framework",
+  "version": "1.0.0",
+  "codename": "Sovereign Quantum & Physical Intelligence Fabric",
+  "status": "GA",
+  "release_type": "Official Enterprise Golden Master",
+  "total_phases": 120,
+  "release_date": "2026-10-13",
+  "minimum_php": "8.2.0",
+  "author": "Md. Atiquzzaman Ashish",
+  "company": "DotNetBD",
+  "website": "www.dotnetbd.com",
+  "license": "MIT",
+  "runtime_external_dependencies": 0,
+  "master_regression_tests": 1135,
+  "pass_rate": "100%"
+}

@@ -1,0 +1,27 @@
+# ==============================================================================
+# NetFusion Framework — Systemd Queue Worker Daemon Service
+# Path   : /etc/systemd/system/netfusion-queue.service
+# Commands:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable netfusion-queue
+#   sudo systemctl start netfusion-queue
+# Author : Md. Atiquzzaman Ashish (DotNetBD)
+# ==============================================================================
+
+[Unit]
+Description=NetFusion Framework Asynchronous Background Queue Worker
+After=network.target mysql.service mariadb.service redis.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+Restart=always
+RestartSec=5s
+WorkingDirectory=/var/www/netfusion
+ExecStart=/usr/bin/php /var/www/netfusion/netfusion queue:work --queue=default,emails,webhooks --sleep=3 --tries=3 --memory=256
+StandardOutput=append:/var/www/netfusion/storage/logs/queue-worker.log
+StandardError=append:/var/www/netfusion/storage/logs/queue-worker.log
+
+[Install]
+WantedBy=multi-user.target

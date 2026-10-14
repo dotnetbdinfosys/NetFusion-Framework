@@ -1,0 +1,19 @@
+{
+    "name": "Commerce",
+    "slug": "commerce",
+    "version": "1.0.0",
+    "description": "Enterprise E-Commerce, POS Checkout & Omni-Channel Sales Management Module for NetFusion Framework",
+    "author": "Md. Atiquzzaman Ashish (DotNetBD)",
+    "providers": [
+        "NetFusion\\Modules\\Commerce\\Providers\\CommerceServiceProvider"
+    ],
+    "autoload": {
+        "psr-4": {
+            "NetFusion\\Modules\\Commerce\\": ""
+        }
+    },
+    "dependencies": [
+        "System"
+    ],
+    "active": true
+}

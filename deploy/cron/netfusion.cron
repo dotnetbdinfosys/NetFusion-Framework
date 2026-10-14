@@ -1,0 +1,8 @@
+# ==============================================================================
+# NetFusion Framework — Standard Crontab Schedule
+# Path   : /etc/cron.d/netfusion
+# Author : Md. Atiquzzaman Ashish (DotNetBD)
+# ==============================================================================
+
+# Run the NetFusion schedule worker every minute as web user
+* * * * * www-data /usr/bin/php /var/www/netfusion/netfusion schedule:run >> /dev/null 2>&1

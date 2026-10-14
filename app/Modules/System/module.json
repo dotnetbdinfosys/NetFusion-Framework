@@ -1,0 +1,13 @@
+{
+    "name": "System Engine",
+    "slug": "system",
+    "version": "1.0.0",
+    "description": "Core System Management, Health Diagnostics, and Module Inspector",
+    "author": "NetFusion Framework",
+    "enabled": true,
+    "priority": 10,
+    "providers": [
+        "NetFusion\\Modules\\System\\Providers\\SystemServiceProvider"
+    ],
+    "dependencies": []
+}

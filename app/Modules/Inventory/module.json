@@ -1,0 +1,12 @@
+{
+  "name": "Inventory",
+  "slug": "inventory",
+  "version": "1.0.0",
+  "description": "Enterprise Inventory, Multi-Warehouse Stock Tracking, and Supply Chain Movements",
+  "author": "Md. Atiquzzaman Ashish (DotNetBD)",
+  "enabled": true,
+  "priority": 25,
+  "providers": [
+    "NetFusion\\Modules\\Inventory\\Providers\\InventoryServiceProvider"
+  ]
+}
