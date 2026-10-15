@@ -165,6 +165,10 @@ $router->get('/install/completed', [\NetFusion\App\Http\Controllers\InstallContr
 
 $router->group(['prefix' => 'admin', 'name' => 'admin.'], function (Router $r) {
     $r->get('/dashboard', [\NetFusion\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+    $r->post('/modules/toggle', [\NetFusion\App\Http\Controllers\DashboardController::class, 'toggleModule'])->name('modules.toggle');
+    $r->post('/tenants/switch', [\NetFusion\App\Http\Controllers\DashboardController::class, 'switchTenant'])->name('tenants.switch');
+    $r->post('/tenants/create', [\NetFusion\App\Http\Controllers\DashboardController::class, 'createTenant'])->name('tenants.create');
+    $r->post('/users/create', [\NetFusion\App\Http\Controllers\DashboardController::class, 'createUser'])->name('users.create');
 });
 
 $router->get('/api/v1/dashboard/metrics', [\NetFusion\App\Http\Controllers\DashboardController::class, 'metrics'])->name('api.dashboard.metrics');

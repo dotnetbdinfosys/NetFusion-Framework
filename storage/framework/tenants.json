@@ -1,0 +1,29 @@
+[
+    {
+        "id": "tenant_primary",
+        "name": "DotNetBD Corporate HQ",
+        "domain": "corporate.nff.dotnetbd.com",
+        "driver": "database",
+        "status": "Active",
+        "users": 24,
+        "created_at": "2026-01-10"
+    },
+    {
+        "id": "tenant_enterprise",
+        "name": "Apex Enterprise Global",
+        "domain": "apex.nff.dotnetbd.com",
+        "driver": "column_scoped",
+        "status": "Active",
+        "users": 86,
+        "created_at": "2026-02-15"
+    },
+    {
+        "id": "tenant_sandbox",
+        "name": "SaaS Sandbox Org",
+        "domain": "sandbox.nff.dotnetbd.com",
+        "driver": "schema_scoped",
+        "status": "Trial",
+        "users": 5,
+        "created_at": "2026-03-01"
+    }
+]

@@ -1,0 +1,9 @@
+{
+    "id": "tenant_primary",
+    "name": "DotNetBD Corporate HQ",
+    "domain": "corporate.nff.dotnetbd.com",
+    "driver": "database",
+    "status": "Active",
+    "users": 24,
+    "created_at": "2026-01-10"
+}

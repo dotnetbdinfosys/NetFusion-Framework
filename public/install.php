@@ -16,7 +16,7 @@ declare(strict_types=1);
 | Website   : https://www.dotnetbd.com
 | Copyright : © DotNetBD. All rights reserved.
 | License   : MIT
-| Version   : 1.1.0 (Fixed Enterprise Release)
+| Version   : 1.3.1 (Fixed Enterprise Release)
 |
 |--------------------------------------------------------------------------
 */
@@ -182,7 +182,7 @@ APP_ENV=production
 APP_KEY={$appKey}
 APP_DEBUG=false
 APP_URL={$appUrl}
-APP_VERSION=1.1.0
+APP_VERSION=1.3.1
 APP_TIMEZONE=Asia/Dhaka
 APP_LOCALE=en
 
@@ -278,7 +278,7 @@ ENV;
             $lockData = json_encode([
                 'installed_at'      => date('c'),
                 'framework'         => 'NetFusion Framework',
-                'version'           => '1.1.0',
+                'version'           => '1.3.1',
                 'app_name'          => $appName,
                 'app_url'           => $appUrl,
                 'admin_email'       => $adminEmail,
