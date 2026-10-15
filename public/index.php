@@ -102,6 +102,19 @@ if (PHP_VERSION_ID < 80100) {
 }
 
 // -----------------------------------------------------------------------------
+// 2.1 First-Run Detection: Redirect to Web Installer if not yet installed
+// -----------------------------------------------------------------------------
+$baseDir = dirname(__DIR__);
+if (!file_exists($baseDir . '/storage/installed')) {
+    $requestUri  = $_SERVER['REQUEST_URI'] ?? '/';
+    $requestPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '/');
+    if (!str_starts_with($requestPath, '/install') && !preg_match('/\.(css|js|ico|png|jpg|jpeg|svg|woff2?)$/i', $requestPath)) {
+        header('Location: /install');
+        exit;
+    }
+}
+
+// -----------------------------------------------------------------------------
 // 3. Bootstrap the application (loads .env, DI container, core bindings)
 // -----------------------------------------------------------------------------
 /** @var \NetFusion\Core\Application $app */

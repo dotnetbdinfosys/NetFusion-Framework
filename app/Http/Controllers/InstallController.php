@@ -149,10 +149,21 @@ class InstallController
         $adminEmail = (string) $request->input('admin_email', 'admin@example.com');
         $adminPass  = (string) $request->input('admin_password', 'password');
 
+        $licenseKey  = trim((string) $request->input('license_key', ''));
+        $companyName = trim((string) $request->input('company_name', ''));
+
         try {
             // 1. Update or generate .env file
             $basePath = function_exists('base_path') ? base_path() : dirname(__DIR__, 2);
             $envPath  = $basePath . DIRECTORY_SEPARATOR . '.env';
+
+            // Ensure SQLite database file exists if sqlite selected
+            if ($driver === 'sqlite') {
+                $sqliteFile = $database ?: ($basePath . '/storage/database.sqlite');
+                if (!file_exists($sqliteFile)) {
+                    @touch($sqliteFile);
+                }
+            }
 
             $appKey = 'base64:' . base64_encode(random_bytes(32));
 
@@ -181,11 +192,71 @@ ENV;
 
             file_put_contents($envPath, $envContent);
 
-            // 2. Mark as installed
+            // 2. Initialize default users table & super admin account
+            try {
+                if ($driver === 'sqlite') {
+                    $pdo = new PDO("sqlite:{$database}", null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        email TEXT NOT NULL UNIQUE,
+                        password TEXT NOT NULL,
+                        role TEXT DEFAULT 'admin',
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )");
+                } elseif ($driver === 'pgsql') {
+                    $pdo = new PDO("pgsql:host={$host};port={$port};dbname={$database}", $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL UNIQUE,
+                        password VARCHAR(255) NOT NULL,
+                        role VARCHAR(50) DEFAULT 'admin',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )");
+                } else {
+                    $pdo = new PDO("mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4", $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS users (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL UNIQUE,
+                        password VARCHAR(255) NOT NULL,
+                        role VARCHAR(50) DEFAULT 'admin',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                }
+
+                $chk = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+                $chk->execute([$adminEmail]);
+                if (!$chk->fetch()) {
+                    $passHash = password_hash($adminPass, PASSWORD_BCRYPT);
+                    $ins = $pdo->prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, 'admin')");
+                    $ins->execute([$adminName, $adminEmail, $passHash]);
+                }
+            } catch (Throwable) {
+                // Non-blocking user creation
+            }
+
+            // 3. DotNetBD License CMS Activation (if provided)
+            if (!empty($licenseKey) && !empty($companyName)) {
+                try {
+                    $licenseManager = new \NetFusion\Core\Foundation\License\LicenseManager();
+                    $licenseManager->activate($licenseKey, $companyName, parse_url($appUrl, PHP_URL_HOST));
+                } catch (Throwable) {
+                    // Non-fatal license activation error
+                }
+            }
+
+            // 4. Mark as installed
             $lockContent = json_encode([
                 'installed_at'  => (new DateTimeImmutable())->format('c'),
                 'framework'     => 'NetFusion Framework',
                 'version'       => '1.0.0',
+                'app_name'      => $appName,
+                'app_url'       => $appUrl,
                 'admin_email'   => $adminEmail,
                 'author'        => 'Md. Atiquzzaman Ashish (DotNetBD)',
             ], JSON_PRETTY_PRINT);
@@ -410,6 +481,21 @@ ENV;
                 <div class="form-group">
                     <label>Admin Password</label>
                     <input type="password" name="admin_password" value="secret123">
+                </div>
+            </div>
+
+            <div class="section-title" style="margin-top:30px">5. DotNetBD Enterprise License Activation (Optional)</div>
+            <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:6px; padding:12px; margin-bottom:16px; font-size:13px; color:#bfdbfe;">
+                ℹ Enter your 20-character DotNetBD License Key and registered Company Name to activate immediately. If you don't have one, leave blank and activate anytime via <code>/license</code>.
+            </div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>License Key</label>
+                    <input type="text" name="license_key" placeholder="e.g. NF-8472-9102-3847">
+                </div>
+                <div class="form-group">
+                    <label>Company Name</label>
+                    <input type="text" name="company_name" placeholder="e.g. DotNetBD Client">
                 </div>
             </div>
 

@@ -1,0 +1,26 @@
+# Environment and Secret configuration
+.env
+.env.backup
+.env.production
+
+# Storage and installation locks
+/storage/installed
+/storage/logs/*.log
+/storage/framework/cache/*
+/storage/framework/views/*
+/storage/framework/sessions/*
+/storage/*.sqlite
+/storage/*.db
+
+# Vendor and packages
+/vendor/
+*.zip
+*.tar.gz
+*.rar
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

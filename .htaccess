@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Prevent direct access to critical root folders
+    RewriteRule ^(core|app|config|storage|database|tests|vendor)/ - [F,L]
+    RewriteRule ^\.env(.*)$ - [F,L]
+    RewriteRule ^composer\.(json|lock)$ - [F,L]
+
+    # Forward web requests to the public directory
+    RewriteRule ^$ public/ [L]
+    RewriteRule (.*) public/$1 [L]
+</IfModule>
