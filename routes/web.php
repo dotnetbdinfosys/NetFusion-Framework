@@ -80,28 +80,38 @@ use NetFusion\Core\Http\Response;
 //  Framework Welcome Route
 // ============================================================
 
-$router->get('/', function () {
-    return Response::json([
-        'framework'   => 'NetFusion Framework',
-        'version'     => app()->version(),
-        'status'      => 'operational',
-        'environment' => app()->environment(),
-        'php_version' => PHP_VERSION,
-        'phase'       => 'Phase 2 — Routing & Middleware Engine ✓',
-        'diagnostics' => [
-            'boot_time_ms'   => app()->elapsedTime(),
-            'peak_memory_mb' => app()->peakMemory(),
-            'app_name'       => config('app.name'),
-            'timezone'       => config('app.timezone'),
-        ],
-        'endpoints' => [
-            'GET  /'           => 'This welcome page',
-            'GET  /health'     => 'Framework health check',
-            'GET  /about'      => 'About NetFusion',
-            'GET  /api/status' => 'API status (via api.php)',
-        ],
-    ]);
+$router->get('/', function (\NetFusion\Core\Http\Request $request) {
+    if ($request->wantsJson() || $request->query('format') === 'json') {
+        return Response::json([
+            'framework'   => 'NetFusion Framework',
+            'version'     => app()->version(),
+            'status'      => 'operational',
+            'environment' => app()->environment(),
+            'php_version' => PHP_VERSION,
+            'phase'       => 'Phase 120 — Golden Master Certified ✓',
+            'diagnostics' => [
+                'boot_time_ms'   => app()->elapsedTime(),
+                'peak_memory_mb' => app()->peakMemory(),
+                'app_name'       => config('app.name'),
+                'timezone'       => config('app.timezone'),
+            ],
+            'endpoints' => [
+                'GET  /'                => 'Dashboard & Framework Portal',
+                'GET  /admin/dashboard' => 'Master Executive Dashboard',
+                'GET  /license'         => 'DotNetBD License CMS Portal',
+                'GET  /health'          => 'Framework health check',
+                'GET  /about'           => 'About NetFusion',
+                'GET  /api/status'      => 'API status (via api.php)',
+            ],
+        ]);
+    }
+
+    return app(\NetFusion\App\Http\Controllers\DashboardController::class)->index($request);
 })->name('home');
+
+$router->get('/admin', function () {
+    return Response::redirect('/admin/dashboard');
+});
 
 // ============================================================
 //  Health Check
