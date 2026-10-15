@@ -17,7 +17,7 @@ namespace NetFusion\Core\Foundation\Release;
 
 class FrameworkReleaseManifest
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.1.0';
     public const CODENAME = 'Sovereign Quantum & Physical Intelligence Fabric';
     public const STATUS = 'GA';
     public const TOTAL_PHASES = 120;
@@ -101,7 +101,7 @@ class FrameworkReleaseManifest
     {
         return <<<BANNER
 ================================================================================
-  NetFusion Framework v1.0.0 (Global General Availability Release)
+  NetFusion Framework v1.1.0 (Fixed Enterprise Release)
   Codename: Sovereign Quantum & Physical Intelligence Fabric
   Author  : Md. Atiquzzaman Ashish | DotNetBD (www.dotnetbd.com)
   License : MIT License | Pure PHP 8.2+ Architecture (Zero Runtime Dependencies)

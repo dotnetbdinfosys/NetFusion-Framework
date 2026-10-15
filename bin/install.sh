@@ -7,7 +7,7 @@
 # Website      : https://www.dotnetbd.com
 # Copyright    : © DotNetBD. All rights reserved.
 # License      : MIT
-# Version      : 1.0.0 (Global GA Release)
+# Version      : 1.1.0 (Fixed Enterprise Release)
 # ==============================================================================
 
 set -eo pipefail

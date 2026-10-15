@@ -7,7 +7,7 @@
 # Website      : https://www.dotnetbd.com
 # Copyright    : © DotNetBD. All rights reserved.
 # License      : MIT
-# Version      : 1.0.0 (Global GA Release)
+# Version      : 1.1.0 (Fixed Enterprise Release)
 # ==============================================================================
 
 set -eo pipefail
@@ -206,7 +206,7 @@ APP_NAME="NetFusion Framework"
 APP_ENV=production
 APP_DEBUG=false
 APP_URL=http://localhost:8000
-APP_VERSION=1.0.0
+APP_VERSION=1.1.0
 APP_TIMEZONE=Asia/Dhaka
 APP_LOCALE=en
 APP_KEY=base64:GENERATE_A_32_CHARACTER_RANDOM_KEY_HERE
