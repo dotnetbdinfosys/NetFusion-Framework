@@ -15,7 +15,7 @@ declare(strict_types=1);
 | Author    : Md. Atiquzzaman Ashish
 | Company   : DotNetBD
 | License   : MIT
-| Version   : 1.3.1
+| Version   : 1.3.5
 |
 |--------------------------------------------------------------------------
 */

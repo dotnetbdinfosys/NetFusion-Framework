@@ -85,7 +85,7 @@ return [
     /**
      * The current application version.
      */
-    'version' => env('APP_VERSION', '1.3.1'),
+    'version' => env('APP_VERSION', '1.3.5'),
 
     /**
      * The application environment.

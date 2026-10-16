@@ -1,6 +1,6 @@
 # NetFusion Framework
 
-[![Version](https://img.shields.io/badge/Version-v1.3.1-blueviolet.svg)](version.json)
+[![Version](https://img.shields.io/badge/Version-v1.3.5-blueviolet.svg)](version.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PHP Version](https://img.shields.io/badge/PHP-%3E%3D8.2-777BB4.svg)](https://php.net)
 [![DotNetBD Engine](https://img.shields.io/badge/DotNetBD-v5.1.8-success.svg)](https://www.dotnetbd.com)

@@ -93,7 +93,7 @@ class Application extends Container
     /**
      * NetFusion Framework version.
      */
-    public const VERSION = '1.3.1';
+    public const VERSION = '1.3.5';
 
     /**
      * The absolute base path of the application (project root).
