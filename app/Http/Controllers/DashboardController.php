@@ -27,6 +27,7 @@ declare(strict_types=1);
 namespace NetFusion\App\Http\Controllers;
 
 use DateTimeImmutable;
+use NetFusion\App\Http\Helpers\SiteSettingsHelper;
 use NetFusion\Core\Database\DatabaseManager;
 use NetFusion\Core\Foundation\License\LicenseManager;
 use NetFusion\Core\Foundation\Release\FrameworkReleaseManifest;
@@ -201,10 +202,12 @@ class DashboardController
      */
     public function createTenant(Request $request): Response
     {
-        $id     = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $request->input('id', '')));
-        $name   = trim((string) $request->input('name', ''));
-        $domain = trim((string) $request->input('domain', ''));
-        $driver = trim((string) $request->input('driver', 'database'));
+        $id          = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $request->input('id', '')));
+        $name        = trim((string) $request->input('name', ''));
+        $siteTitle   = trim((string) $request->input('site_title', ''));
+        $description = trim((string) $request->input('description', ''));
+        $domain      = trim((string) $request->input('domain', ''));
+        $driver      = trim((string) $request->input('driver', 'database'));
 
         if (empty($id) || empty($name)) {
             return Response::json([
@@ -224,13 +227,15 @@ class DashboardController
         }
 
         $newTenant = [
-            'id'         => $id,
-            'name'       => $name,
-            'domain'     => $domain ?: ($id . '.nff.dotnetbd.com'),
-            'driver'     => in_array($driver, ['database', 'column_scoped', 'schema_scoped'], true) ? $driver : 'database',
-            'status'     => 'Active',
-            'users'      => 1,
-            'created_at' => (new DateTimeImmutable())->format('Y-m-d'),
+            'id'          => $id,
+            'name'        => $name,
+            'site_title'  => $siteTitle ?: ($name . ' Portal'),
+            'description' => $description ?: ('Enterprise workspace for ' . $name . '.'),
+            'domain'      => $domain ?: ($id . '.nff.dotnetbd.com'),
+            'driver'      => in_array($driver, ['database', 'column_scoped', 'schema_scoped'], true) ? $driver : 'database',
+            'status'      => 'Active',
+            'users'       => 1,
+            'created_at'  => (new DateTimeImmutable())->format('Y-m-d'),
         ];
 
         $tenants[] = $newTenant;
@@ -240,6 +245,101 @@ class DashboardController
             'success' => true,
             'tenant'  => $newTenant,
             'message' => "নতুন টেন্যান্ট '{$name}' সফলভাবে তৈরি করা হয়েছে।"
+        ]);
+    }
+
+    /**
+     * Update an existing tenant details (site title, name, description, domain, driver, status).
+     */
+    public function updateTenant(Request $request): Response
+    {
+        $id          = trim((string) $request->input('id', ''));
+        $name        = trim((string) $request->input('name', ''));
+        $siteTitle   = trim((string) $request->input('site_title', ''));
+        $description = trim((string) $request->input('description', ''));
+        $domain      = trim((string) $request->input('domain', ''));
+        $driver      = trim((string) $request->input('driver', 'database'));
+        $status      = trim((string) $request->input('status', 'Active'));
+
+        if (empty($id) || empty($name)) {
+            return Response::json([
+                'success' => false,
+                'message' => 'টেন্যান্ট আইডি এবং নাম বাধ্যতামূলক (Tenant ID and Name are required).'
+            ], 400);
+        }
+
+        $tenants = $this->loadTenants();
+        $updated = null;
+        foreach ($tenants as &$t) {
+            if ($t['id'] === $id) {
+                $t['name']        = $name;
+                $t['site_title']  = $siteTitle ?: $name;
+                $t['description'] = $description;
+                if (!empty($domain)) {
+                    $t['domain'] = $domain;
+                }
+                if (in_array($driver, ['database', 'column_scoped', 'schema_scoped'], true)) {
+                    $t['driver'] = $driver;
+                }
+                if (in_array($status, ['Active', 'Trial', 'Suspended', 'Maintenance'], true)) {
+                    $t['status'] = $status;
+                }
+                $updated = $t;
+                break;
+            }
+        }
+        unset($t);
+
+        if (!$updated) {
+            return Response::json([
+                'success' => false,
+                'message' => "টেন্যান্ট '{$id}' পাওয়া যায়নি (Tenant not found)."
+            ], 404);
+        }
+
+        $this->saveTenants($tenants);
+
+        // Also update active_tenant.json if this is currently the active tenant
+        $activeTenantFile = storage_path('framework/active_tenant.json');
+        if (is_file($activeTenantFile)) {
+            $activeData = json_decode((string) file_get_contents($activeTenantFile), true);
+            if (is_array($activeData) && ($activeData['id'] ?? '') === $id) {
+                file_put_contents($activeTenantFile, json_encode($updated, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            }
+        }
+
+        return Response::json([
+            'success' => true,
+            'tenant'  => $updated,
+            'message' => "টেন্যান্ট '{$name}' এর তথ্য সফলভাবে আপডেট করা হয়েছে (Tenant details updated successfully)।"
+        ]);
+    }
+
+    /**
+     * Update branding, logo, favicon, header, and footer settings.
+     */
+    public function updateBranding(Request $request): Response
+    {
+        $newSettings = [
+            'site_name'           => trim((string) $request->input('site_name', 'NetFusion Framework')),
+            'site_tagline'        => trim((string) $request->input('site_tagline', 'Enterprise Framework')),
+            'logo_icon'           => trim((string) $request->input('logo_icon', '⚡')),
+            'logo_url'            => trim((string) $request->input('logo_url', '')),
+            'favicon_url'         => trim((string) $request->input('favicon_url', '')),
+            'header_title'        => trim((string) $request->input('header_title', 'Executive Dashboard')),
+            'header_announcement' => trim((string) $request->input('header_announcement', '')),
+            'footer_copyright'    => trim((string) $request->input('footer_copyright', '')),
+            'footer_company'      => trim((string) $request->input('footer_company', '')),
+            'footer_website'      => trim((string) $request->input('footer_website', '')),
+            'default_language'    => in_array($request->input('default_language'), ['en', 'bn'], true) ? $request->input('default_language') : 'en',
+        ];
+
+        $saved = SiteSettingsHelper::save($newSettings);
+
+        return Response::json([
+            'success'  => true,
+            'settings' => $saved,
+            'message'  => 'সাইট সেটিংস ও ব্র্যান্ডিং কনফিগারেশন সফলভাবে সংরক্ষণ করা হয়েছে (Branding saved successfully)।'
         ]);
     }
 
@@ -458,37 +558,48 @@ class DashboardController
         if (is_file($tenantsFile)) {
             $data = json_decode((string) file_get_contents($tenantsFile), true);
             if (is_array($data) && !empty($data)) {
+                foreach ($data as &$t) {
+                    $t['site_title']  = $t['site_title'] ?? ($t['name'] . ' Portal');
+                    $t['description'] = $t['description'] ?? 'Enterprise tenant workspace on NetFusion platform.';
+                }
+                unset($t);
                 return $data;
             }
         }
 
         $defaultTenants = [
             [
-                'id'         => 'tenant_primary',
-                'name'       => 'DotNetBD Corporate HQ',
-                'domain'     => 'corporate.nff.dotnetbd.com',
-                'driver'     => 'database',
-                'status'     => 'Active',
-                'users'      => 24,
-                'created_at' => '2026-01-10',
+                'id'          => 'tenant_primary',
+                'name'        => 'DotNetBD Corporate HQ',
+                'site_title'  => 'DotNetBD Corporate Hub',
+                'description' => 'Primary headquarters tenant for enterprise operations, financial consolidation, and executive governance.',
+                'domain'      => 'corporate.nff.dotnetbd.com',
+                'driver'      => 'database',
+                'status'      => 'Active',
+                'users'       => 24,
+                'created_at'  => '2026-01-10',
             ],
             [
-                'id'         => 'tenant_enterprise',
-                'name'       => 'Apex Enterprise Global',
-                'domain'     => 'apex.nff.dotnetbd.com',
-                'driver'     => 'column_scoped',
-                'status'     => 'Active',
-                'users'      => 86,
-                'created_at' => '2026-02-15',
+                'id'          => 'tenant_enterprise',
+                'name'        => 'Apex Enterprise Global',
+                'site_title'  => 'Apex Global Commerce Portal',
+                'description' => 'Multinational supply-chain and global distribution channel for Apex Enterprise subsidiaries.',
+                'domain'      => 'apex.nff.dotnetbd.com',
+                'driver'      => 'column_scoped',
+                'status'      => 'Active',
+                'users'       => 86,
+                'created_at'  => '2026-02-15',
             ],
             [
-                'id'         => 'tenant_sandbox',
-                'name'       => 'SaaS Sandbox Org',
-                'domain'     => 'sandbox.nff.dotnetbd.com',
-                'driver'     => 'schema_scoped',
-                'status'     => 'Trial',
-                'users'      => 5,
-                'created_at' => '2026-03-01',
+                'id'          => 'tenant_sandbox',
+                'name'        => 'SaaS Sandbox Org',
+                'site_title'  => 'SaaS Testing & Sandbox',
+                'description' => 'Isolated staging environment for third-party integrations, webhook testing, and developer pilots.',
+                'domain'      => 'sandbox.nff.dotnetbd.com',
+                'driver'      => 'schema_scoped',
+                'status'      => 'Trial',
+                'users'       => 5,
+                'created_at'  => '2026-03-01',
             ],
         ];
 
@@ -698,6 +809,86 @@ class DashboardController
      */
     protected function renderDashboardHtml(array $metrics): string
     {
+        $settings     = SiteSettingsHelper::get();
+        $locale       = SiteSettingsHelper::resolveLocale();
+        $isBn         = ($locale === 'bn');
+
+        $siteName     = htmlspecialchars($settings['site_name'] ?? 'NetFusion Framework');
+        $siteTagline  = htmlspecialchars($settings['site_tagline'] ?? 'Enterprise Framework');
+        $logoIcon     = htmlspecialchars($settings['logo_icon'] ?: '⚡');
+        $logoUrl      = htmlspecialchars($settings['logo_url'] ?? '');
+        $faviconUrl   = htmlspecialchars($settings['favicon_url'] ?? '');
+        $headerTitle  = htmlspecialchars($settings['header_title'] ?? ($isBn ? 'এক্সিকিউটিভ ড্যাশবোর্ড' : 'Executive Dashboard'));
+        $announcement = htmlspecialchars($settings['header_announcement'] ?? ($isBn ? 'স্বাগতম, NetFusion Enterprise Hub এ 👋' : 'Welcome to NetFusion Enterprise Hub 👋'));
+        $footerCopy   = $settings['footer_copyright'] ?? 'NetFusion Framework &bull; Developed by Md. Atiquzzaman Ashish &bull; &copy; 2026 DotNetBD';
+        $footerCompany= htmlspecialchars($settings['footer_company'] ?? 'DotNetBD');
+        $footerWebsite= htmlspecialchars($settings['footer_website'] ?? 'https://www.dotnetbd.com');
+
+        $logoHtml = !empty($logoUrl)
+            ? sprintf('<img src="%s" alt="Logo" style="width:36px; height:36px; object-fit:contain; border-radius:8px;">', $logoUrl)
+            : sprintf('<div class="brand-icon">%s</div>', $logoIcon);
+
+        $faviconTag = !empty($faviconUrl)
+            ? sprintf('<link rel="icon" href="%s">', $faviconUrl)
+            : '';
+
+        $enActive = !$isBn ? 'background: #2563eb; color: #ffffff;' : 'color: #64748b; background: transparent;';
+        $bnActive = $isBn ? 'background: #2563eb; color: #ffffff;' : 'color: #64748b; background: transparent;';
+
+        // Bilingual labels (English default, Bengali secondary)
+        $txt = [
+            'core_nav'       => $isBn ? 'মূল মেন্যু (Core)' : 'Core Navigation',
+            'dashboard'      => $isBn ? 'ড্যাশবোর্ড (Dashboard)' : 'Executive Dashboard',
+            'tenants'        => $isBn ? 'মাল্টি-টেন্যান্ট (Tenancy)' : 'Multi-Tenancy',
+            'modules'        => $isBn ? 'মডিউল সুইচ (Module Toggle)' : 'Module Switcher',
+            'users'          => $isBn ? 'ইউজার ও রোল (RBAC Matrix)' : 'RBAC Matrix',
+            'biz_modules'    => $isBn ? 'বিজনেস মডিউলসমূহ (HMVC)' : 'Business Modules',
+            'sys_engine'     => $isBn ? 'সিস্টেম কনট্রোল (Engine)' : 'System Engine',
+            'telemetry'      => $isBn ? 'টেলিমেট্রি (Diagnostics)' : 'Diagnostics & Telemetry',
+            'health'         => $isBn ? 'সিস্টেম হেলথ (Health Dashboard)' : 'System Health',
+            'installer'      => $isBn ? 'ইনস্টলার উইজার্ড (Installer)' : 'Installer Wizard',
+            'tenant_lbl'     => $isBn ? '🏢 টেন্যান্ট:' : '🏢 Tenant:',
+            'customization'  => $isBn ? 'কাস্টমাইজেশন ও ব্র্যান্ডিং' : 'Customization & Branding',
+            'btn_settings'   => $isBn ? 'সাইট সেটিংস' : 'Site Settings',
+            'btn_new_tenant' => $isBn ? '➕ নতুন টেন্যান্ট' : '➕ New Tenant',
+            'btn_new_user'   => $isBn ? '👤 নতুন ইউজার' : '👤 New User',
+            'active_tenants' => $isBn ? 'সক্রিয় টেন্যান্টস (Tenancy)' : 'Active Tenants (Tenancy)',
+            'active_modules' => $isBn ? 'মডিউল স্ট্যাটাস (HMVC)' : 'Active Modules (HMVC)',
+            'active_roles'   => $isBn ? 'ইউজার ভ্যারিয়েন্টস (RBAC)' : 'User Variants (RBAC)',
+            'core_arch'      => $isBn ? 'সিস্টেম প্ল্যাটফর্ম' : 'Core Architecture',
+            'items'          => $isBn ? 'টি' : 'Active',
+            'modules_sub'    => $isBn ? 'লাইভ টগলযোগ্য মডিউল আর্কিটেকচার' : 'Live Hot-Swappable HMVC Modules',
+            'roles_sub'      => $isBn ? '৮টি গ্র্যানুলার পারমিশন পলিসি' : 'Granular RBAC Security Policies',
+            'core_status'    => $isBn ? 'লকড এন্টারপ্রাইজ কোর ইঞ্জিন' : 'Enterprise Core Engine',
+            'tenants_title'  => $isBn ? 'মাল্টি-টেন্যান্ট ম্যানেজমেন্ট ও সাইট কাস্টমাইজেশন' : 'Multi-Tenancy Management & Tenant Customization',
+            'modules_title'  => $isBn ? 'HMVC বিজনেস মডিউলসমূহ ও অন/অফ সিস্টেম' : 'HMVC Business Modules Dynamic On/Off Switcher',
+            'modules_hint'   => $isBn ? 'সরাসরি সুইচে ক্লিক করে যেকোনো মডিউল অন বা অফ করুন' : 'Click the toggle switch to enable or disable any module in real-time',
+            'rbac_title'     => $isBn ? 'ইউজার ভ্যারিয়েন্ট ও রোল হাইয়ারার্কি' : 'User Variants & RBAC Hierarchy',
+            'matrix_title'   => $isBn ? 'রোল ও পারমিশন কন্ট্রোল ম্যাট্রিক্স' : 'RBAC Policy Matrix & Access Control',
+            'users_title'    => $isBn ? 'সক্রিয় ইউজার ডিরেক্টরি' : 'Registered Users Directory & Tenancy Assignment',
+            'diagnostics'    => $isBn ? 'সার্ভার স্পেসিফিকেশন ও এনভায়রনমেন্ট ডায়াগনস্টিকস' : 'System Diagnostics & Runtime Telemetry',
+            'edit'           => $isBn ? 'এডিট' : 'Edit',
+            'switch_ctx'     => $isBn ? 'সুইচ' : 'Switch Context',
+            'active_ctx'     => $isBn ? 'সক্রিয়' : 'Active Context',
+            'org_tenant'     => $isBn ? 'প্রতিষ্ঠান ও আইডি' : 'Organization & ID',
+            'site_details'   => $isBn ? 'সাইট নাম ও বিস্তারিত' : 'Site Name & Details',
+            'domain'         => $isBn ? 'ডোমেইন / সাবডোমেইন' : 'Domain / Subdomain',
+            'driver'         => $isBn ? 'আইসোলেশন ড্রাইভার' : 'Isolation Driver',
+            'status'         => $isBn ? 'স্ট্যাটাস' : 'Status',
+            'users_count'    => $isBn ? 'ইউজার সংখ্যা' : 'Users',
+            'action'         => $isBn ? 'অ্যাকশন' : 'Action',
+        ];
+
+        $modLabels = [
+            'accounting' => $isBn ? 'অ্যাকাউন্টিং (Accounting)' : 'Accounting & Ledger',
+            'billing'    => $isBn ? 'বিলিং ও সাবস্ক্রিপশন (Billing)' : 'Billing & Subscriptions',
+            'crm'        => $isBn ? 'সিআরএম ও লিডস (CRM)' : 'CRM & Leads Pipeline',
+            'commerce'   => $isBn ? 'কমার্স ও পিওএস (Commerce)' : 'Commerce & POS',
+            'hrm'        => $isBn ? 'এইচআরএম ও পেরোল (HRM)' : 'HRM & Payroll',
+            'inventory'  => $isBn ? 'ইনভেন্টরি ও গুদাম (Inventory)' : 'Inventory & Warehousing',
+            'system'     => $isBn ? 'সিস্টেম মনিটর (System)' : 'System Monitor',
+        ];
+
         $appName     = htmlspecialchars($metrics['overview']['app_name']);
         $version     = htmlspecialchars($metrics['overview']['version']);
         $phpVersion  = htmlspecialchars($metrics['overview']['php_version']);
@@ -722,6 +913,24 @@ class DashboardController
         $activeTenantId   = htmlspecialchars($activeTenant['id'] ?? 'tenant_primary');
         $activeTenantDomain = htmlspecialchars($activeTenant['domain'] ?? 'corporate.nff.dotnetbd.com');
         $activeTenantDriver = htmlspecialchars(strtoupper(str_replace('_', ' ', $activeTenant['driver'] ?? 'database')));
+
+        $welcomeDesc = $isBn
+            ? "আপনার মাল্টি-টেন্যান্ট SaaS ফ্রেমওয়ার্ক প্রস্তুত। বর্তমান সক্রিয় টেন্যান্ট: <strong>{$activeTenantName}</strong> (আইসোলেশন: <code>{$activeTenantDriver}</code>, ডোমেইন: <code>{$activeTenantDomain}</code>)। নিচে মডিউল অন/অফ সুইচিং, টেন্যান্ট সাইট ডিটেইল কাস্টমাইজেশন এবং ইউজার ভ্যারিয়েন্ট ও পারমিশন ম্যাট্রিক্স কনফিগার করুন।"
+            : "Your sovereign multi-tenant SaaS framework is operational. Active tenant context: <strong>{$activeTenantName}</strong> (Isolation: <code>{$activeTenantDriver}</code>, Domain: <code>{$activeTenantDomain}</code>). Configure module dynamic switching, tenant site branding, and RBAC security matrix below.";
+
+        $rawSiteName      = htmlspecialchars($settings['site_name'] ?? 'NetFusion Framework', ENT_QUOTES);
+        $rawSiteTagline   = htmlspecialchars($settings['site_tagline'] ?? 'Enterprise Full-Stack & HMVC Platform', ENT_QUOTES);
+        $rawHeaderTitle   = htmlspecialchars($settings['header_title'] ?? 'Executive Dashboard', ENT_QUOTES);
+        $rawAnnouncement  = htmlspecialchars($settings['header_announcement'] ?? 'Welcome to NetFusion Enterprise Hub', ENT_QUOTES);
+        $rawLogoIcon      = htmlspecialchars($settings['logo_icon'] ?? '⚡', ENT_QUOTES);
+        $rawLogoUrl       = htmlspecialchars($settings['logo_url'] ?? '', ENT_QUOTES);
+        $rawFaviconUrl    = htmlspecialchars($settings['favicon_url'] ?? '', ENT_QUOTES);
+        $rawDefaultLang   = htmlspecialchars($settings['default_language'] ?? 'en', ENT_QUOTES);
+        $rawFooterCopy    = htmlspecialchars($settings['footer_copyright'] ?? 'NetFusion Framework • © 2026 DotNetBD', ENT_QUOTES);
+        $rawFooterCompany = htmlspecialchars($settings['footer_company'] ?? 'DotNetBD', ENT_QUOTES);
+        $rawFooterWebsite = htmlspecialchars($settings['footer_website'] ?? 'https://www.dotnetbd.com', ENT_QUOTES);
+        $enSelected       = ($rawDefaultLang === 'en') ? 'selected' : '';
+        $bnSelected       = ($rawDefaultLang === 'bn') ? 'selected' : '';
 
         $modulesList   = $metrics['discovered_modules'];
         $tenantsList   = $metrics['tenants'];
@@ -749,22 +958,49 @@ class DashboardController
         $tenantRowsHtml = '';
         foreach ($tenantsList as $t) {
             $isCurrent = ($t['id'] === $activeTenantId);
-            $currBadge = $isCurrent ? '<span class="badge badge-info">Active Context</span>' : '<button class="btn btn-sm btn-outline" onclick="switchTenant(\'' . htmlspecialchars($t['id']) . '\')">Switch Context</button>';
+            $currBadge = $isCurrent
+                ? sprintf('<span class="badge badge-info">%s</span>', $txt['active_ctx'])
+                : sprintf('<button class="btn btn-sm btn-outline" onclick="switchTenant(\'%s\')">%s</button>', htmlspecialchars($t['id']), $txt['switch_ctx']);
+
+            $siteTitleStr = htmlspecialchars($t['site_title'] ?? ($t['name'] . ' Portal'));
+            $descStr      = htmlspecialchars($t['description'] ?? '');
+
+            $tenantDataJson = htmlspecialchars(json_encode([
+                'id'          => $t['id'],
+                'name'        => $t['name'],
+                'site_title'  => $t['site_title'] ?? ($t['name'] . ' Portal'),
+                'description' => $t['description'] ?? '',
+                'domain'      => $t['domain'] ?? '',
+                'driver'      => $t['driver'] ?? 'database',
+                'status'      => $t['status'] ?? 'Active',
+            ], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+
             $tenantRowsHtml .= sprintf(
                 '<tr>
-                    <td><strong>%s</strong><br><small style="color:var(--text-muted);">%s</small></td>
+                    <td><strong>%s</strong><br><small style="color:var(--text-muted);">ID: <code>%s</code></small></td>
+                    <td><strong>%s</strong><br><div style="font-size:12px; color:var(--text-muted); line-height:1.4; max-width:280px; margin-top:2px;">%s</div></td>
                     <td><code>%s</code></td>
                     <td><span class="badge badge-info">%s</span></td>
                     <td><span class="badge badge-success">● %s</span></td>
-                    <td>%d Users</td>
-                    <td style="text-align:right;">%s</td>
+                    <td>%d %s</td>
+                    <td style="text-align:right;">
+                        <div style="display:inline-flex; gap:6px; align-items:center;">
+                            <button class="btn btn-sm btn-outline" onclick=\'openEditTenantModal(%s)\'>✏️ %s</button>
+                            %s
+                        </div>
+                    </td>
                 </tr>',
                 htmlspecialchars($t['name']),
                 htmlspecialchars($t['id']),
+                $siteTitleStr,
+                $descStr,
                 htmlspecialchars($t['domain']),
                 htmlspecialchars(strtoupper(str_replace('_', ' ', $t['driver']))),
                 htmlspecialchars($t['status']),
                 $t['users'] ?? 1,
+                $isBn ? 'জন' : 'Users',
+                $tenantDataJson,
+                $txt['edit'],
                 $currBadge
             );
         }
@@ -899,11 +1135,12 @@ HTML;
 
         return <<<HTML
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="{$locale}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{$appName} v{$version} — Executive Enterprise Dashboard</title>
+    <title>{$siteName} — {$txt['dashboard']}</title>
+    {$faviconTag}
     <style>
         :root {
             --primary: #2563eb;
@@ -1253,10 +1490,13 @@ HTML;
             background: #fff;
             border-radius: var(--radius-lg);
             width: 100%;
-            max-width: 480px;
+            max-width: 540px;
+            max-height: 90vh;
+            overflow-y: auto;
             padding: 28px;
             box-shadow: var(--shadow-lg);
         }
+        .grid-2-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .modal-header h3 { font-size: 18px; font-weight: 700; color: var(--text-heading); }
         .modal-close { cursor: pointer; font-size: 20px; color: var(--text-muted); border: none; background: transparent; }
@@ -1310,82 +1550,82 @@ HTML;
 </head>
 <body>
     <div class="app-layout">
-        <!-- 1. SIDEBAR MENU PANEL (মেন্যু প্যানেল) -->
+        <!-- 1. SIDEBAR MENU PANEL -->
         <aside class="sidebar">
             <div class="sidebar-brand">
-                <div class="brand-icon">N</div>
+                {$logoHtml}
                 <div class="brand-text">
-                    <h2>NetFusion</h2>
-                    <span>Enterprise Framework</span>
+                    <h2>{$siteName}</h2>
+                    <span>{$siteTagline}</span>
                 </div>
             </div>
 
             <nav class="sidebar-menu">
-                <div class="menu-label">মূল মেন্যু (Core)</div>
+                <div class="menu-label">{$txt['core_nav']}</div>
                 <a href="/admin/dashboard" class="nav-item active">
-                    <span class="nav-icon">📊</span> ড্যাশবোর্ড (Dashboard)
+                    <span class="nav-icon">📊</span> {$txt['dashboard']}
                 </a>
                 <a href="#tenants" class="nav-item">
-                    <span class="nav-icon">🏢</span> মাল্টি-টেন্যান্ট (Tenancy)
+                    <span class="nav-icon">🏢</span> {$txt['tenants']}
                 </a>
                 <a href="#modules" class="nav-item">
-                    <span class="nav-icon">📦</span> মডিউল সুইচ (Module Toggle)
+                    <span class="nav-icon">📦</span> {$txt['modules']}
                 </a>
                 <a href="#users" class="nav-item">
-                    <span class="nav-icon">👥</span> ইউজার ও রোল (RBAC Matrix)
+                    <span class="nav-icon">👥</span> {$txt['users']}
                 </a>
 
-                <div class="menu-label">বিজনেস মডিউলস (HMVC)</div>
+                <div class="menu-label">{$txt['biz_modules']}</div>
                 <a href="/accounting" class="nav-item">
-                    <span class="nav-icon">📊</span> অ্যাকাউন্টিং (Accounting)
+                    <span class="nav-icon">📊</span> {$modLabels['accounting']}
                 </a>
                 <a href="/billing" class="nav-item">
-                    <span class="nav-icon">💳</span> বিলিং ও সাবস্ক্রিপশন (Billing)
+                    <span class="nav-icon">💳</span> {$modLabels['billing']}
                 </a>
                 <a href="/crm" class="nav-item">
-                    <span class="nav-icon">👥</span> সিআরএম ও লিডস (CRM)
+                    <span class="nav-icon">👥</span> {$modLabels['crm']}
                 </a>
                 <a href="/commerce" class="nav-item">
-                    <span class="nav-icon">🛍️</span> কমার্স ও পিওএস (Commerce)
+                    <span class="nav-icon">🛍️</span> {$modLabels['commerce']}
                 </a>
                 <a href="/hrm" class="nav-item">
-                    <span class="nav-icon">👔</span> এইচআরএম ও পেরোল (HRM)
+                    <span class="nav-icon">👔</span> {$modLabels['hrm']}
                 </a>
                 <a href="/inventory" class="nav-item">
-                    <span class="nav-icon">📦</span> ইনভেন্টরি ও গুদাম (Inventory)
+                    <span class="nav-icon">📦</span> {$modLabels['inventory']}
                 </a>
                 <a href="/system/status" class="nav-item">
-                    <span class="nav-icon">⚙️</span> সিস্টেম মনিটর (System)
+                    <span class="nav-icon">⚙️</span> {$modLabels['system']}
                 </a>
 
-                <div class="menu-label">সিস্টেম কনট্রোল (Engine)</div>
+                <div class="menu-label">{$txt['sys_engine']}</div>
                 <a href="#telemetry" class="nav-item">
-                    <span class="nav-icon">🩺</span> টেলিমেট্রি (Diagnostics)
+                    <span class="nav-icon">🩺</span> {$txt['telemetry']}
                 </a>
                 <a href="/health" class="nav-item">
-                    <span class="nav-icon">💓</span> সিস্টেম হেলথ (Health Dashboard)
+                    <span class="nav-icon">💓</span> {$txt['health']}
                 </a>
                 <a href="/install" class="nav-item">
-                    <span class="nav-icon">🚀</span> ইনস্টলার উইজার্ড (Installer)
+                    <span class="nav-icon">🚀</span> {$txt['installer']}
                 </a>
             </nav>
 
             <div class="sidebar-footer">
-                <div><strong>NetFusion Framework</strong></div>
-                <div style="font-size:11px; margin-top:2px;">Enterprise Release v{$version}</div>
+                <div><strong>{$siteName}</strong></div>
+                <div style="font-size:11px; margin-top:2px; color:var(--text-muted);">&copy; {$footerCompany} &bull; All Rights Reserved</div>
             </div>
         </aside>
 
         <!-- 2. MAIN WORKSPACE AREA -->
         <div class="workspace">
-            <!-- 2.1 TOP HEADER (হেডার) -->
+            <!-- 2.1 TOP HEADER -->
             <header class="top-header">
                 <div class="header-left">
                     <div class="header-title">
-                        <span>⚡</span> এক্সিকিউটিভ ড্যাশবোর্ড
+                        <span>⚡</span> {$headerTitle}
                     </div>
                     <div class="tenant-selector">
-                        <span>🏢 টেন্যান্ট:</span>
+                        <span>{$txt['tenant_lbl']}</span>
                         <select id="activeTenantSelect" onchange="switchTenant(this.value)">
                             {$tenantOptionsHtml}
                         </select>
@@ -1393,8 +1633,19 @@ HTML;
                 </div>
 
                 <div class="header-right">
+                    <!-- Language Switcher -->
+                    <div class="lang-switch" style="display:flex; align-items:center; background:#f1f5f9; padding:2px; border-radius:20px; font-size:12px; border:1px solid var(--border-color);">
+                        <a href="?lang=en" style="padding:4px 10px; border-radius:14px; text-decoration:none; font-weight:600; font-size:11.5px; {$enActive}">EN</a>
+                        <a href="?lang=bn" style="padding:4px 10px; border-radius:14px; text-decoration:none; font-weight:600; font-size:11.5px; {$bnActive}">বাং</a>
+                    </div>
+
+                    <!-- Customization / Site Settings button -->
+                    <button class="btn btn-sm btn-outline" onclick="openModal('brandingSettingsModal')" title="{$txt['customization']}">
+                        ⚙️ {$txt['btn_settings']}
+                    </button>
+
                     {$licStatusBadge}
-                    <div class="version-badge">v{$version} (Fixed)</div>
+
                     <div class="user-pill">
                         <div class="user-avatar" style="background:#2563eb;">A</div>
                         <span>Super Administrator</span>
@@ -1407,16 +1658,12 @@ HTML;
                 <!-- Welcome Banner -->
                 <div class="welcome-card">
                     <div class="welcome-text">
-                        <h1>স্বাগতম, NetFusion Enterprise Hub এ 👋</h1>
-                        <p>
-                            আপনার মাল্টি-টেন্যান্ট SaaS ফ্রেমওয়ার্ক প্রস্তুত। বর্তমান সক্রিয় টেন্যান্ট: <strong>{$activeTenantName}</strong> 
-                            (আইসোলেশন: <code>{$activeTenantDriver}</code>, ডোমেইন: <code>{$activeTenantDomain}</code>)। 
-                            নিচে মডিউল অন/অফ সুইচিং এবং ইউজার ভ্যারিয়েন্ট ও পারমিশন ম্যাট্রিক্স কনফিগার করুন।
-                        </p>
+                        <h1>{$announcement}</h1>
+                        <p>{$welcomeDesc}</p>
                     </div>
                     <div class="welcome-actions">
-                        <button class="btn btn-primary" onclick="openModal('createTenantModal')">➕ নতুন টেন্যান্ট</button>
-                        <button class="btn btn-outline" onclick="openModal('createUserModal')">👤 নতুন ইউজার</button>
+                        <button class="btn btn-primary" onclick="openModal('createTenantModal')">{$txt['btn_new_tenant']}</button>
+                        <button class="btn btn-outline" onclick="openModal('createUserModal')">{$txt['btn_new_user']}</button>
                     </div>
                 </div>
 
@@ -1424,59 +1671,60 @@ HTML;
                 <div class="kpi-grid">
                     <div class="kpi-card">
                         <div class="kpi-header">
-                            <span class="kpi-title">সক্রিয় টেন্যান্টস (Tenancy)</span>
+                            <span class="kpi-title">{$txt['active_tenants']}</span>
                             <span class="kpi-icon blue">🏢</span>
                         </div>
-                        <div class="kpi-val">3 টি</div>
-                        <div class="kpi-meta">সক্রিয় কনটেক্সট: <strong>{$activeTenantId}</strong></div>
+                        <div class="kpi-val">3 {$txt['items']}</div>
+                        <div class="kpi-meta">{$txt['active_ctx']}: <strong>{$activeTenantId}</strong></div>
                     </div>
 
                     <div class="kpi-card">
                         <div class="kpi-header">
-                            <span class="kpi-title">মডিউল স্ট্যাটাস (HMVC)</span>
+                            <span class="kpi-title">{$txt['active_modules']}</span>
                             <span class="kpi-icon green">📦</span>
                         </div>
-                        <div class="kpi-val" id="kpi-active-modules">{$activeModulesCount} / {$totalModulesCount} টি</div>
-                        <div class="kpi-meta">লাইভ টগলযোগ্য মডিউল আর্কিটেকচার</div>
+                        <div class="kpi-val" id="kpi-active-modules">{$activeModulesCount} / {$totalModulesCount} {$txt['items']}</div>
+                        <div class="kpi-meta">{$txt['modules_sub']}</div>
                     </div>
 
                     <div class="kpi-card">
                         <div class="kpi-header">
-                            <span class="kpi-title">ইউজার ভ্যারিয়েন্টস (RBAC)</span>
+                            <span class="kpi-title">{$txt['active_roles']}</span>
                             <span class="kpi-icon purple">👥</span>
                         </div>
-                        <div class="kpi-val">5 টি রোল</div>
-                        <div class="kpi-meta">8টি গ্র্যানুলার পারমিশন কন্ট্রোল পলিসি</div>
+                        <div class="kpi-val">5 Roles</div>
+                        <div class="kpi-meta">{$txt['roles_sub']}</div>
                     </div>
 
                     <div class="kpi-card">
                         <div class="kpi-header">
-                            <span class="kpi-title">সিস্টেম ফ্রেমওয়ার্ক</span>
+                            <span class="kpi-title">{$txt['core_arch']}</span>
                             <span class="kpi-icon amber">⚡</span>
                         </div>
-                        <div class="kpi-val">v{$version}</div>
-                        <div class="kpi-meta">লকড এন্টারপ্রাইজ রিলিজ (PHP {$phpVersion})</div>
+                        <div class="kpi-val">Enterprise Core</div>
+                        <div class="kpi-meta">{$txt['core_status']} (PHP {$phpVersion})</div>
                     </div>
                 </div>
 
                 <!-- 1. MULTI-TENANCY MANAGEMENT SECTION -->
                 <div class="section-header" id="tenants">
                     <div class="section-title">
-                        <span>🏢</span> মাল্টি-টেন্যান্ট ম্যানেজমেন্ট ও আইসোলেশন কন্ট্রোল (Multi-Tenancy Engine)
+                        <span>🏢</span> {$txt['tenants_title']}
                     </div>
-                    <button class="btn btn-sm btn-primary" onclick="openModal('createTenantModal')">➕ নতুন টেন্যান্ট যোগ করুন</button>
+                    <button class="btn btn-sm btn-primary" onclick="openModal('createTenantModal')">{$txt['btn_new_tenant']}</button>
                 </div>
 
                 <div class="table-card">
                     <table>
                         <thead>
                             <tr>
-                                <th>টেন্যান্ট নাম ও আইডি</th>
-                                <th>ডোমেইন / সাবডোমেইন</th>
-                                <th>আইসোলেশন ড্রাইভার</th>
-                                <th>স্ট্যাটাস</th>
-                                <th>ইউজার সংখ্যা</th>
-                                <th style="text-align:right;">অ্যাকশন</th>
+                                <th>{$txt['org_tenant']}</th>
+                                <th>{$txt['site_details']}</th>
+                                <th>{$txt['domain']}</th>
+                                <th>{$txt['driver']}</th>
+                                <th>{$txt['status']}</th>
+                                <th>{$txt['users_count']}</th>
+                                <th style="text-align:right;">{$txt['action']}</th>
                             </tr>
                         </thead>
                         <tbody id="tenantsTableBody">
@@ -1488,9 +1736,9 @@ HTML;
                 <!-- 2. DYNAMIC MODULES ON/OFF SYSTEM SECTION -->
                 <div class="section-header" id="modules">
                     <div class="section-title">
-                        <span>📦</span> HMVC বিজনেস মডিউলসমূহ ও অন/অফ সিস্টেম (Dynamic Module Toggle Switch)
+                        <span>📦</span> {$txt['modules_title']}
                     </div>
-                    <span style="font-size:12px; color:var(--text-muted);">সরাসরি সুইচে ক্লিক করে যেকোনো মডিউল অন বা অফ করুন</span>
+                    <span style="font-size:12px; color:var(--text-muted);">{$txt['modules_hint']}</span>
                 </div>
 
                 <div class="modules-grid" id="modulesGrid">
@@ -1500,9 +1748,9 @@ HTML;
                 <!-- 3. USER VARIANTS & RBAC PERMISSIONS SECTION -->
                 <div class="section-header" id="users">
                     <div class="section-title">
-                        <span>👥</span> ইউজার ভ্যারিয়েন্ট ও রোল হাইয়ারার্কি (User Variants & RBAC Hierarchy)
+                        <span>👥</span> {$txt['rbac_title']}
                     </div>
-                    <button class="btn btn-sm btn-outline" onclick="openModal('createUserModal')">➕ নতুন ইউজার তৈরি করুন</button>
+                    <button class="btn btn-sm btn-outline" onclick="openModal('createUserModal')">{$txt['btn_new_user']}</button>
                 </div>
 
                 <div class="roles-grid">
@@ -1512,7 +1760,7 @@ HTML;
                 <!-- Permissions Matrix Table -->
                 <div class="table-card">
                     <div style="font-weight:700; font-size:14px; margin-bottom:14px; color:var(--text-heading); display:flex; align-items:center; gap:8px;">
-                        <span>📋</span> রোল ও পারমিশন কন্ট্রোল ম্যাট্রিক্স (RBAC Policy Matrix)
+                        <span>📋</span> {$txt['matrix_title']}
                     </div>
                     <table>
                         <thead>
@@ -1535,9 +1783,9 @@ HTML;
                 <div class="table-card">
                     <div style="font-weight:700; font-size:14px; margin-bottom:14px; color:var(--text-heading); display:flex; justify-content:space-between; align-items:center;">
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span>👤</span> সক্রিয় ইউজার ডিরেক্টরি (Active User Accounts)
+                            <span>👤</span> {$txt['users_title']}
                         </div>
-                        <button class="btn btn-sm btn-primary" onclick="openModal('createUserModal')">➕ ইউজার যোগ করুন</button>
+                        <button class="btn btn-sm btn-primary" onclick="openModal('createUserModal')">{$txt['btn_new_user']}</button>
                     </div>
                     <table>
                         <thead>
@@ -1558,7 +1806,7 @@ HTML;
                 <!-- System Telemetry Table -->
                 <div class="section-header" id="telemetry">
                     <div class="section-title">
-                        <span>🩺</span> সার্ভার স্পেসিফিকেশন ও এনভায়রনমেন্ট ডায়াগনস্টিকস (System Telemetry)
+                        <span>🩺</span> {$txt['diagnostics']}
                     </div>
                 </div>
 
@@ -1581,7 +1829,7 @@ HTML;
                             </tr>
                             <tr>
                                 <td><strong>Framework Release</strong></td>
-                                <td>NetFusion v{$version} (Fixed Enterprise Release)</td>
+                                <td>NetFusion v{$version}</td>
                                 <td>v1.3.5</td>
                                 <td style="text-align:right"><span class="badge badge-success">✔ PASS</span></td>
                             </tr>
@@ -1608,15 +1856,15 @@ HTML;
                 </div>
             </main>
 
-            <!-- 2.3 APP FOOTER (ফুটার) -->
+            <!-- 2.3 APP FOOTER -->
             <footer class="app-footer">
                 <div>
-                    <strong>NetFusion Framework v{$version}</strong> &bull; Developed by <strong>Md. Atiquzzaman Ashish</strong> &bull; &copy; 2026 <strong>DotNetBD</strong>
+                    <strong>{$siteName}</strong> &bull; v{$version} &bull; {$footerCopy}
                 </div>
                 <div class="footer-links">
-                    <a href="/health">সিস্টেম হেলথ</a>
-                    <a href="https://github.com/dotnetbdinfosys/NetFusion-Framework" target="_blank">GitHub</a>
-                    <a href="https://www.dotnetbd.com" target="_blank">DotNetBD ওয়েবসাইট</a>
+                    <a href="/admin/dashboard">{$txt['dashboard']}</a>
+                    <a href="/health">{$txt['health']}</a>
+                    <a href="{$footerWebsite}" target="_blank">{$footerCompany}</a>
                 </div>
             </footer>
         </div>
@@ -1626,33 +1874,102 @@ HTML;
     <div class="modal-overlay" id="createTenantModal">
         <div class="modal-box">
             <div class="modal-header">
-                <h3>নতুন টেন্যান্ট তৈরি করুন</h3>
+                <h3>{$txt['btn_new_tenant']}</h3>
                 <button class="modal-close" onclick="closeModal('createTenantModal')">&times;</button>
             </div>
             <form onsubmit="handleCreateTenant(event)">
-                <div class="form-group">
-                    <label>টেন্যান্ট আইডি (স্ল্যাগ, যেমন: acme_corp)</label>
-                    <input type="text" id="newTenantId" class="form-control" required placeholder="e.g. acme_corp">
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Tenant ID (e.g. acme_corp)</label>
+                        <input type="text" id="newTenantId" class="form-control" required placeholder="acme_corp">
+                    </div>
+                    <div class="form-group">
+                        <label>Organization Name</label>
+                        <input type="text" id="newTenantName" class="form-control" required placeholder="Acme Corporation Ltd.">
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label>প্রতিষ্ঠানের নাম</label>
-                    <input type="text" id="newTenantName" class="form-control" required placeholder="e.g. Acme Corporation Ltd.">
+                    <label>Tenant Site Title / Portal Name</label>
+                    <input type="text" id="newTenantSiteTitle" class="form-control" placeholder="Acme Enterprise Portal">
                 </div>
                 <div class="form-group">
-                    <label>ডোমেইন / সাবডোমেইন</label>
-                    <input type="text" id="newTenantDomain" class="form-control" placeholder="e.g. acme.nff.dotnetbd.com">
+                    <label>Site Details / Description</label>
+                    <textarea id="newTenantDescription" class="form-control" rows="2" placeholder="Details about this tenant organization and branch operations..."></textarea>
                 </div>
-                <div class="form-group">
-                    <label>ডাটাবেজ আইসোলেশন ড্রাইভার</label>
-                    <select id="newTenantDriver" class="form-control">
-                        <option value="database">Database Isolation (স্বতন্ত্র ডাটাবেজ)</option>
-                        <option value="column_scoped">Column Scoped (একই ডাটাবেজ, tenant_id দিয়ে স্কোপ্ড)</option>
-                        <option value="schema_scoped">Schema Scoped (স্বতন্ত্র স্কিমা)</option>
-                    </select>
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Domain / Subdomain</label>
+                        <input type="text" id="newTenantDomain" class="form-control" placeholder="acme.nff.dotnetbd.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Isolation Driver</label>
+                        <select id="newTenantDriver" class="form-control">
+                            <option value="database">Database (Isolated Database)</option>
+                            <option value="column_scoped">Column Scoped (Tenant ID)</option>
+                            <option value="schema_scoped">Schema Scoped (PostgreSQL/SQL)</option>
+                        </select>
+                    </div>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                    <button type="button" class="btn btn-outline" onclick="closeModal('createTenantModal')">বাতিল</button>
-                    <button type="submit" class="btn btn-primary">তৈরি করুন</button>
+                    <button type="button" class="btn btn-outline" onclick="closeModal('createTenantModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Tenant</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- EDIT TENANT MODAL (সাইট ডিটেইল ও টেন্যান্ট কাস্টমাইজেশন) -->
+    <div class="modal-overlay" id="editTenantModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>✏️ Edit Tenant & Site Details</h3>
+                <button class="modal-close" onclick="closeModal('editTenantModal')">&times;</button>
+            </div>
+            <form onsubmit="handleUpdateTenant(event)">
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Tenant ID (Immutable)</label>
+                        <input type="text" id="editTenantId" class="form-control" readonly style="background:#f1f5f9; cursor:not-allowed;">
+                    </div>
+                    <div class="form-group">
+                        <label>Organization Name</label>
+                        <input type="text" id="editTenantName" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Tenant Site Title / Name</label>
+                    <input type="text" id="editTenantSiteTitle" class="form-control" required placeholder="e.g. DotNetBD Corporate Hub">
+                </div>
+                <div class="form-group">
+                    <label>Site Details & Description</label>
+                    <textarea id="editTenantDescription" class="form-control" rows="3" placeholder="Detailed purpose, operations, and billing tier for this tenant..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Custom Domain / Host</label>
+                    <input type="text" id="editTenantDomain" class="form-control" required placeholder="corporate.nff.dotnetbd.com">
+                </div>
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Isolation Driver</label>
+                        <select id="editTenantDriver" class="form-control">
+                            <option value="database">Database Isolation</option>
+                            <option value="column_scoped">Column Scoped</option>
+                            <option value="schema_scoped">Schema Scoped</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Account Status</label>
+                        <select id="editTenantStatus" class="form-control">
+                            <option value="Active">Active</option>
+                            <option value="Trial">Trial</option>
+                            <option value="Suspended">Suspended</option>
+                            <option value="Maintenance">Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('editTenantModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
                 </div>
             </form>
         </div>
@@ -1662,37 +1979,115 @@ HTML;
     <div class="modal-overlay" id="createUserModal">
         <div class="modal-box">
             <div class="modal-header">
-                <h3>নতুন ইউজার যুক্ত করুন</h3>
+                <h3>{$txt['btn_new_user']}</h3>
                 <button class="modal-close" onclick="closeModal('createUserModal')">&times;</button>
             </div>
             <form onsubmit="handleCreateUser(event)">
                 <div class="form-group">
-                    <label>পুরো নাম</label>
+                    <label>Full Name</label>
                     <input type="text" id="newUserName" class="form-control" required placeholder="e.g. Mehedi Hasan">
                 </div>
                 <div class="form-group">
-                    <label>ইমেইল অ্যাড্রেস</label>
+                    <label>Email Address</label>
                     <input type="email" id="newUserEmail" class="form-control" required placeholder="e.g. mehedi@example.com">
                 </div>
                 <div class="form-group">
-                    <label>ইউজার ভ্যারিয়েন্ট / রোল (Role)</label>
+                    <label>RBAC Variant / Role</label>
                     <select id="newUserRole" class="form-control">
-                        <option value="staff">👤 Staff / Operator (স্টাফ অপারেটর)</option>
-                        <option value="manager">👔 Operations Manager (অপারেশনস ম্যানেজার)</option>
-                        <option value="tenant_admin">🏢 Tenant Administrator (টেন্যান্ট অ্যাডমিন)</option>
-                        <option value="super_admin">👑 Super Administrator (সুপার অ্যাডমিন)</option>
-                        <option value="client">👥 Client / Customer (সেলফ সার্ভিস পোর্টাল)</option>
+                        <option value="staff">👤 Staff / Operator</option>
+                        <option value="manager">👔 Operations Manager</option>
+                        <option value="tenant_admin">🏢 Tenant Administrator</option>
+                        <option value="super_admin">👑 Super Administrator</option>
+                        <option value="client">👥 Client / Customer</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>অ্যাসাইনকৃত টেন্যান্ট</label>
+                    <label>Assigned Tenant</label>
                     <select id="newUserTenant" class="form-control">
                         {$tenantOptionsHtml}
                     </select>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                    <button type="button" class="btn btn-outline" onclick="closeModal('createUserModal')">বাতিল</button>
-                    <button type="submit" class="btn btn-primary">ইউজার যোগ করুন</button>
+                    <button type="button" class="btn btn-outline" onclick="closeModal('createUserModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- BRANDING & SITE SETTINGS CUSTOMIZATION MODAL -->
+    <div class="modal-overlay" id="brandingSettingsModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>⚙️ {$txt['customization']}</h3>
+                <button class="modal-close" onclick="closeModal('brandingSettingsModal')">&times;</button>
+            </div>
+            <form onsubmit="handleSaveBranding(event)">
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Site Name</label>
+                        <input type="text" id="brandSiteName" class="form-control" required value="{$rawSiteName}">
+                    </div>
+                    <div class="form-group">
+                        <label>Site Tagline</label>
+                        <input type="text" id="brandSiteTagline" class="form-control" value="{$rawSiteTagline}">
+                    </div>
+                </div>
+
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Header Title</label>
+                        <input type="text" id="brandHeaderTitle" class="form-control" value="{$rawHeaderTitle}">
+                    </div>
+                    <div class="form-group">
+                        <label>Default System Language</label>
+                        <select id="brandDefaultLanguage" class="form-control">
+                            <option value="en" {$enSelected}>English (Default)</option>
+                            <option value="bn" {$bnSelected}>বাংলা (Bengali)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Welcome Announcement Banner</label>
+                    <input type="text" id="brandHeaderAnnouncement" class="form-control" value="{$rawAnnouncement}">
+                </div>
+
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Logo Emoji / Icon</label>
+                        <input type="text" id="brandLogoIcon" class="form-control" value="{$rawLogoIcon}" placeholder="⚡">
+                    </div>
+                    <div class="form-group">
+                        <label>Logo Image URL (Optional)</label>
+                        <input type="text" id="brandLogoUrl" class="form-control" value="{$rawLogoUrl}" placeholder="https://example.com/logo.png">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Favicon URL (Optional)</label>
+                    <input type="text" id="brandFaviconUrl" class="form-control" value="{$rawFaviconUrl}" placeholder="https://example.com/favicon.ico">
+                </div>
+
+                <div class="form-group">
+                    <label>Footer Copyright Text</label>
+                    <input type="text" id="brandFooterCopyright" class="form-control" value="{$rawFooterCopy}">
+                </div>
+
+                <div class="grid-2-form">
+                    <div class="form-group">
+                        <label>Company / Brand Name</label>
+                        <input type="text" id="brandFooterCompany" class="form-control" value="{$rawFooterCompany}">
+                    </div>
+                    <div class="form-group">
+                        <label>Company Website URL</label>
+                        <input type="text" id="brandFooterWebsite" class="form-control" value="{$rawFooterWebsite}">
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('brandingSettingsModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
                 </div>
             </form>
         </div>
@@ -1716,6 +2111,17 @@ HTML;
 
         function closeModal(id) {
             document.getElementById(id).style.display = 'none';
+        }
+
+        function openEditTenantModal(t) {
+            document.getElementById('editTenantId').value = t.id || '';
+            document.getElementById('editTenantName').value = t.name || '';
+            document.getElementById('editTenantSiteTitle').value = t.site_title || '';
+            document.getElementById('editTenantDescription').value = t.description || '';
+            document.getElementById('editTenantDomain').value = t.domain || '';
+            document.getElementById('editTenantDriver').value = t.driver || 'database';
+            document.getElementById('editTenantStatus').value = t.status || 'Active';
+            openModal('editTenantModal');
         }
 
         // Toggle Module Dynamic AJAX Handler
@@ -1776,6 +2182,8 @@ HTML;
             e.preventDefault();
             const id = document.getElementById('newTenantId').value.trim();
             const name = document.getElementById('newTenantName').value.trim();
+            const site_title = document.getElementById('newTenantSiteTitle').value.trim();
+            const description = document.getElementById('newTenantDescription').value.trim();
             const domain = document.getElementById('newTenantDomain').value.trim();
             const driver = document.getElementById('newTenantDriver').value;
 
@@ -1786,7 +2194,7 @@ HTML;
                         'Content-Type': 'application/x-www-form-urlencoded',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: new URLSearchParams({ id, name, domain, driver })
+                    body: new URLSearchParams({ id, name, site_title, description, domain, driver })
                 });
 
                 const data = await response.json();
@@ -1796,6 +2204,82 @@ HTML;
                     setTimeout(() => { window.location.reload(); }, 600);
                 } else {
                     showToast(data.message || 'টেন্যান্ট তৈরি করা সম্ভব হয়নি', true);
+                }
+            } catch (err) {
+                showToast('সার্ভার যোগাযোগে সমস্যা হয়েছে', true);
+            }
+        }
+
+        // Handle Update Existing Tenant Form
+        async function handleUpdateTenant(e) {
+            e.preventDefault();
+            const id = document.getElementById('editTenantId').value.trim();
+            const name = document.getElementById('editTenantName').value.trim();
+            const site_title = document.getElementById('editTenantSiteTitle').value.trim();
+            const description = document.getElementById('editTenantDescription').value.trim();
+            const domain = document.getElementById('editTenantDomain').value.trim();
+            const driver = document.getElementById('editTenantDriver').value;
+            const status = document.getElementById('editTenantStatus').value;
+
+            try {
+                const response = await fetch('/admin/tenants/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: new URLSearchParams({ id, name, site_title, description, domain, driver, status })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message);
+                    closeModal('editTenantModal');
+                    setTimeout(() => { window.location.reload(); }, 600);
+                } else {
+                    showToast(data.message || 'টেন্যান্ট আপডেট ব্যর্থ হয়েছে', true);
+                }
+            } catch (err) {
+                showToast('সার্ভার যোগাযোগে সমস্যা হয়েছে', true);
+            }
+        }
+
+        // Handle Save Branding & Site Settings Form
+        async function handleSaveBranding(e) {
+            e.preventDefault();
+            const site_name = document.getElementById('brandSiteName').value.trim();
+            const site_tagline = document.getElementById('brandSiteTagline').value.trim();
+            const header_title = document.getElementById('brandHeaderTitle').value.trim();
+            const header_announcement = document.getElementById('brandHeaderAnnouncement').value.trim();
+            const logo_icon = document.getElementById('brandLogoIcon').value.trim();
+            const logo_url = document.getElementById('brandLogoUrl').value.trim();
+            const favicon_url = document.getElementById('brandFaviconUrl').value.trim();
+            const default_language = document.getElementById('brandDefaultLanguage').value;
+            const footer_copyright = document.getElementById('brandFooterCopyright').value.trim();
+            const footer_company = document.getElementById('brandFooterCompany').value.trim();
+            const footer_website = document.getElementById('brandFooterWebsite').value.trim();
+
+            try {
+                const response = await fetch('/admin/settings/branding', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: new URLSearchParams({
+                        site_name, site_tagline, header_title, header_announcement,
+                        logo_icon, logo_url, favicon_url, default_language,
+                        footer_copyright, footer_company, footer_website
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message);
+                    closeModal('brandingSettingsModal');
+                    setTimeout(() => { window.location.reload(); }, 600);
+                } else {
+                    showToast(data.message || 'সেটিংস সংরক্ষণ করা সম্ভব হয়নি', true);
                 }
             } catch (err) {
                 showToast('সার্ভার যোগাযোগে সমস্যা হয়েছে', true);

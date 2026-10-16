@@ -161,6 +161,8 @@ $router->group(['prefix' => 'admin', 'name' => 'admin.'], function (Router $r) {
     $r->post('/modules/toggle', [\NetFusion\App\Http\Controllers\DashboardController::class, 'toggleModule'])->name('modules.toggle');
     $r->post('/tenants/switch', [\NetFusion\App\Http\Controllers\DashboardController::class, 'switchTenant'])->name('tenants.switch');
     $r->post('/tenants/create', [\NetFusion\App\Http\Controllers\DashboardController::class, 'createTenant'])->name('tenants.create');
+    $r->post('/tenants/update', [\NetFusion\App\Http\Controllers\DashboardController::class, 'updateTenant'])->name('tenants.update');
+    $r->post('/settings/branding', [\NetFusion\App\Http\Controllers\DashboardController::class, 'updateBranding'])->name('settings.branding');
     $r->post('/users/create', [\NetFusion\App\Http\Controllers\DashboardController::class, 'createUser'])->name('users.create');
 });
 

@@ -22,6 +22,7 @@ declare(strict_types=1);
 
 namespace NetFusion\App\Http\Controllers;
 
+use NetFusion\App\Http\Helpers\SiteSettingsHelper;
 use NetFusion\Core\Http\Request;
 use NetFusion\Core\Http\Response;
 
@@ -32,6 +33,16 @@ class HealthController
      */
     public function index(Request $request): Response
     {
+        $settings    = SiteSettingsHelper::get();
+        $siteName    = htmlspecialchars($settings['site_name'] ?? 'NetFusion Framework');
+        $siteTagline = htmlspecialchars($settings['site_tagline'] ?? 'Enterprise Framework');
+        $logoHtml    = !empty($settings['logo_url'])
+            ? sprintf('<img src="%s" alt="Logo" style="width:36px; height:36px; object-fit:contain; border-radius:8px;">', htmlspecialchars($settings['logo_url']))
+            : sprintf('<div class="brand-icon">%s</div>', htmlspecialchars($settings['logo_icon'] ?: '⚡'));
+        $faviconTag  = !empty($settings['favicon_url'])
+            ? sprintf('<link rel="icon" href="%s">', htmlspecialchars($settings['favicon_url']))
+            : '';
+
         $version     = app()->version();
         $phpVersion  = PHP_VERSION;
         $phpOs       = PHP_OS . ' (' . php_uname('m') . ')';
@@ -142,6 +153,7 @@ class HealthController
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>সিস্টেম হেলথ ও ডায়াগনস্টিকস — NetFusion v{$version}</title>
+    {$faviconTag}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -384,10 +396,10 @@ class HealthController
     <!-- 1. SIDEBAR -->
     <aside class="sidebar">
         <div class="sidebar-brand">
-            <div class="brand-icon">⚡</div>
+            {$logoHtml}
             <div class="brand-text">
-                <h2>NetFusion</h2>
-                <span>Enterprise Framework</span>
+                <h2>{$siteName}</h2>
+                <span>{$siteTagline}</span>
             </div>
         </div>
 
@@ -442,8 +454,8 @@ class HealthController
         </nav>
 
         <div class="sidebar-footer">
-            <div><strong>NetFusion Framework</strong></div>
-            <div style="font-size:11px; margin-top:2px;">Enterprise Release v{$version}</div>
+            <div><strong>{$siteName}</strong></div>
+            <div style="font-size:11px; margin-top:2px; color:var(--text-muted);">&copy; {$settings['footer_company']} &bull; All Rights Reserved</div>
         </div>
     </aside>
 
@@ -611,13 +623,12 @@ class HealthController
         <!-- FOOTER -->
         <footer class="app-footer">
             <div>
-                <strong>NetFusion Framework v{$version}</strong> &bull; Developed by <strong>Md. Atiquzzaman Ashish</strong> &bull; &copy; 2026 <strong>DotNetBD</strong>
+                <strong>{$siteName}</strong> &bull; v{$version} &bull; {$settings['footer_copyright']}
             </div>
             <div class="footer-links">
                 <a href="/admin/dashboard">ড্যাশবোর্ড</a>
                 <a href="/health">সিস্টেম হেলথ</a>
-                <a href="https://github.com/dotnetbdinfosys/NetFusion-Framework" target="_blank">GitHub</a>
-                <a href="https://www.dotnetbd.com" target="_blank">DotNetBD ওয়েবসাইট</a>
+                <a href="{$settings['footer_website']}" target="_blank">{$settings['footer_company']}</a>
             </div>
         </footer>
     </div>

@@ -1,6 +1,8 @@
 {
     "id": "tenant_primary",
     "name": "DotNetBD Corporate HQ",
+    "site_title": "DotNetBD Corporate Hub",
+    "description": "Primary headquarters tenant for enterprise operations, financial consolidation, and executive governance.",
     "domain": "corporate.nff.dotnetbd.com",
     "driver": "database",
     "status": "Active",

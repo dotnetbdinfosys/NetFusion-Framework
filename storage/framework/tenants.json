@@ -2,6 +2,8 @@
     {
         "id": "tenant_primary",
         "name": "DotNetBD Corporate HQ",
+        "site_title": "DotNetBD Corporate Hub",
+        "description": "Primary headquarters tenant for enterprise operations, financial consolidation, and executive governance.",
         "domain": "corporate.nff.dotnetbd.com",
         "driver": "database",
         "status": "Active",
@@ -11,6 +13,8 @@
     {
         "id": "tenant_enterprise",
         "name": "Apex Enterprise Global",
+        "site_title": "Apex Global Commerce Portal",
+        "description": "Multinational supply-chain and global distribution channel for Apex Enterprise subsidiaries.",
         "domain": "apex.nff.dotnetbd.com",
         "driver": "column_scoped",
         "status": "Active",
@@ -20,6 +24,8 @@
     {
         "id": "tenant_sandbox",
         "name": "SaaS Sandbox Org",
+        "site_title": "SaaS Testing & Sandbox",
+        "description": "Isolated staging environment for third-party integrations, webhook testing, and developer pilots.",
         "domain": "sandbox.nff.dotnetbd.com",
         "driver": "schema_scoped",
         "status": "Trial",
