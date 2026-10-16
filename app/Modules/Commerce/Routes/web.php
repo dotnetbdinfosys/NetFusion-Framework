@@ -27,7 +27,13 @@ use NetFusion\Modules\Commerce\Controllers\CommerceDashboardController;
 
 $router->get('/commerce', [CommerceDashboardController::class, 'index'])->name('commerce.dashboard');
 $router->get('/commerce/orders', [CommerceDashboardController::class, 'orders'])->name('commerce.orders');
+$router->get('/commerce/orders/edit', [CommerceDashboardController::class, 'editOrder'])->name('commerce.orders.edit');
+$router->post('/commerce/orders/edit', [CommerceDashboardController::class, 'updateOrder']);
+$router->post('/commerce/orders/update', [CommerceDashboardController::class, 'updateOrder'])->name('commerce.orders.update');
+
 $router->get('/commerce/products', [CommerceDashboardController::class, 'products'])->name('commerce.products');
+$router->get('/commerce/products/edit', [CommerceDashboardController::class, 'editProduct'])->name('commerce.products.edit');
+$router->post('/commerce/products/update', [CommerceDashboardController::class, 'updateProduct'])->name('commerce.products.update');
 $router->get('/commerce/customers', [CommerceDashboardController::class, 'customers'])->name('commerce.customers');
 $router->get('/commerce/payments', [CommerceDashboardController::class, 'payments'])->name('commerce.payments');
 $router->get('/commerce/coupons', [CommerceDashboardController::class, 'coupons'])->name('commerce.coupons');

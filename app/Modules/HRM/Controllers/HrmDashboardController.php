@@ -25,6 +25,7 @@ namespace NetFusion\Modules\HRM\Controllers;
 use NetFusion\Core\Http\Request;
 use NetFusion\Core\Http\Response;
 use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
+use NetFusion\App\Services\ModuleDataRepository;
 
 class HrmDashboardController
 {
@@ -213,17 +214,69 @@ class HrmDashboardController
     }
 
     /**
-     * Employees Page
+     * Employees Page - Fully Functional & Editable
      */
     public function employees(Request $request): Response
     {
+        $employees = ModuleDataRepository::all('hrm_employees');
+        $flashMsg = $request->query('msg');
+        $flashAlert = '';
+        if ($flashMsg) {
+            $flashAlert = '
+            <div style="padding: 12px 16px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 6px; margin-bottom: 20px; color: #065f46; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center;">
+                <span>✅ ' . htmlspecialchars($flashMsg) . '</span>
+                <span style="cursor: pointer;" onclick="this.parentElement.style.display=\'none\'">✕</span>
+            </div>';
+        }
+
+        $rowsHtml = '';
+        foreach ($employees as $emp) {
+            $code = htmlspecialchars($emp['id'] ?? '');
+            $name = htmlspecialchars($emp['name'] ?? '');
+            $dept = htmlspecialchars($emp['department'] ?? '');
+            $desig = htmlspecialchars($emp['designation'] ?? '');
+            $salary = (float) ($emp['salary'] ?? 0);
+            $status = $emp['status'] ?? 'active';
+
+            $badgeType = match ($status) {
+                'active' => 'success',
+                'probation' => 'warning',
+                default => 'secondary',
+            };
+
+            $statusText = match ($status) {
+                'active' => 'স্থায়ী (Permanent)',
+                'probation' => 'প্রবেশন (Probation)',
+                default => 'অব্যাহতি (Resigned)',
+            };
+
+            $jsonAttr = htmlspecialchars(json_encode($emp, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+
+            $rowsHtml .= '
+            <tr id="row-' . $code . '">
+                <td><code>' . $code . '</code></td>
+                <td><strong>' . $name . '</strong></td>
+                <td>' . $dept . '</td>
+                <td>' . $desig . '</td>
+                <td style="text-align:right; font-weight:700; color:#065f46;">' . ModuleLayoutHelper::currency($salary) . '</td>
+                <td>' . ModuleLayoutHelper::badge($statusText, $badgeType) . '</td>
+                <td>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick=\'openEditEmpModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
+                        <a href="/hrm/employees/edit?id=' . urlencode($code) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
+                    </div>
+                </td>
+            </tr>';
+        }
+
         $body = '
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        ' . $flashAlert . '
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
             <div>
                 <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">👤 কর্মচারী তালিকা (Employee Roster)</h2>
-                <p style="margin:0; font-size:13px; color:#64748b;">সকল পূর্ণকালীন, পার্ট-টাইম ও চুক্তিভিত্তিক কর্মীর তথ্যাবলি</p>
+                <p style="margin:0; font-size:13px; color:#64748b;">সকল পূর্ণকালীন, পার্ট-টাইম কর্মীর পদবি, বেতন ও স্ট্যাটাস সম্পাদন</p>
             </div>
-            <button class="btn btn-primary" style="background:#dc2626;" onclick="alert(\'নতুন কর্মচারী রেজিস্ট্রেশন ফর্ম...\')">+ নতুন কর্মী নিবন্ধন</button>
+            <button class="btn btn-primary" style="background:#dc2626;" onclick="openNewEmpModal()">+ নতুন কর্মী নিবন্ধন</button>
         </div>
 
         <div class="card">
@@ -235,24 +288,251 @@ class HrmDashboardController
                             <th>নাম</th>
                             <th>বিভাগ</th>
                             <th>পদবি</th>
-                            <th>ইমেইল ঠিকানা</th>
-                            <th>মোবাইল নম্বর</th>
+                            <th style="text-align:right;">বেতন (৳)</th>
                             <th>স্ট্যাটাস</th>
                             <th>অ্যাকশন</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td><code>EMP-0101</code></td><td><strong>আরিফুল ইসলাম</strong></td><td>ইঞ্জিনিয়ারিং</td><td>Lead Backend Engineer</td><td>ariful@company.bd</td><td>+880 1711-001122</td><td>' . ModuleLayoutHelper::badge('স্থায়ী', 'success') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
-                        <tr><td><code>EMP-0102</code></td><td><strong>নাজমুন নাহার</strong></td><td>ফিন্যান্স</td><td>Senior Accountant</td><td>nazmun@company.bd</td><td>+880 1819-332211</td><td>' . ModuleLayoutHelper::badge('স্থায়ী', 'success') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
-                        <tr><td><code>EMP-0103</code></td><td><strong>কায়সার হামিদ</strong></td><td>মার্কেটিং</td><td>Regional Sales Head</td><td>kaisar@company.bd</td><td>+880 1912-887766</td><td>' . ModuleLayoutHelper::badge('স্থায়ী', 'success') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
-                        <tr><td><code>EMP-0104</code></td><td><strong>ফাতিমা তুজ জোহরা</strong></td><td>এইচআর</td><td>HR Operations Manager</td><td>fatima@company.bd</td><td>+880 1610-445566</td><td>' . ModuleLayoutHelper::badge('স্থায়ী', 'success') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
+                        ' . $rowsHtml . '
                     </tbody>
                 </table>
             </div>
         </div>
+
+        <!-- ══ EDIT EMPLOYEE MODAL ══ -->
+        <div id="empModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; backdrop-filter:blur(3px); align-items:center; justify-content:center; padding:16px;">
+            <div style="background:#fff; border-radius:12px; width:100%; max-width:520px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.15); overflow:hidden;">
+                <div style="padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc;">
+                    <h3 id="empModalTitle" style="margin:0; font-size:16px; font-weight:700;">✏️ কর্মী তথ্য এডিট করুন</h3>
+                    <button type="button" onclick="closeEmpModal()" style="border:none; background:transparent; font-size:18px; cursor:pointer;">✕</button>
+                </div>
+                <form id="empForm" method="POST" action="/hrm/employees/update" style="padding:20px;" onsubmit="handleEmpSubmit(event)">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">কর্মী কোড *</label>
+                            <input type="text" id="emp_id" name="id" readonly required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#f1f5f9; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">কর্মীর পুরো নাম *</label>
+                            <input type="text" id="emp_name" name="name" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:600;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">বিভাগ (Department) *</label>
+                            <input type="text" id="emp_department" name="department" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">পদবি (Designation) *</label>
+                            <input type="text" id="emp_designation" name="designation" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">মাসিক বেতন (৳) *</label>
+                            <input type="number" step="0.01" id="emp_salary" name="salary" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">চাকরির স্ট্যাটাস</label>
+                            <select id="emp_status" name="status" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:600;">
+                                <option value="active">স্থায়ী (Active)</option>
+                                <option value="probation">প্রবেশন (Probation)</option>
+                                <option value="resigned">অব্যাহতি (Resigned)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button type="button" class="btn btn-secondary" onclick="closeEmpModal()">বাতিল</button>
+                        <button type="submit" id="saveEmpBtn" class="btn btn-primary" style="background:#dc2626;">💾 সংরক্ষণ করুন</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+        function openEditEmpModal(item) {
+            document.getElementById("empModalTitle").innerText = "✏️ কর্মী তথ্য এডিট: " + item.name;
+            document.getElementById("emp_id").value = item.id || "";
+            document.getElementById("emp_id").readOnly = true;
+            document.getElementById("emp_name").value = item.name || "";
+            document.getElementById("emp_department").value = item.department || "";
+            document.getElementById("emp_designation").value = item.designation || "";
+            document.getElementById("emp_salary").value = item.salary || 0;
+            document.getElementById("emp_status").value = item.status || "active";
+            document.getElementById("empModal").style.display = "flex";
+        }
+
+        function openNewEmpModal() {
+            const nextId = "EMP-0" + Math.floor(10 + Math.random() * 90);
+            document.getElementById("empModalTitle").innerText = "➕ নতুন কর্মী নিবন্ধন করুন";
+            document.getElementById("emp_id").value = nextId;
+            document.getElementById("emp_id").readOnly = false;
+            document.getElementById("emp_name").value = "";
+            document.getElementById("emp_department").value = "সফটওয়্যার ইঞ্জিনিয়ারিং";
+            document.getElementById("emp_designation").value = "সফটওয়্যার ডেভেলপার";
+            document.getElementById("emp_salary").value = 60000.00;
+            document.getElementById("emp_status").value = "active";
+            document.getElementById("empModal").style.display = "flex";
+        }
+
+        function closeEmpModal() {
+            document.getElementById("empModal").style.display = "none";
+        }
+
+        async function handleEmpSubmit(e) {
+            e.preventDefault();
+            const btn = document.getElementById("saveEmpBtn");
+            btn.disabled = true;
+            btn.innerText = "সংরক্ষণ হচ্ছে...";
+
+            const form = document.getElementById("empForm");
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch("/hrm/employees/update", {
+                    method: "POST",
+                    headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+                    body: formData
+                });
+                const res = await response.json();
+                if (res.success) {
+                    alert("✅ " + res.message);
+                    window.location.reload();
+                } else {
+                    alert("❌ ত্রুটি: " + (res.message || "সংরক্ষণ করা যায়নি"));
+                }
+            } catch (err) {
+                form.submit();
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "💾 সংরক্ষণ করুন";
+            }
+        }
+        </script>
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('hrm', 'কর্মচারী তালিকা', $body, '', '', '/hrm/employees'));
+    }
+
+    /**
+     * Standalone Edit Employee Page (GET /hrm/employees/edit?id=...)
+     */
+    public function editEmployee(Request $request): Response
+    {
+        $id = (string) $request->query('id', '');
+        $emp = ModuleDataRepository::find('hrm_employees', 'id', $id);
+
+        if (!$emp) {
+            return Response::redirect('/hrm/employees?msg=' . urlencode('কর্মচারী তথ্য পাওয়া যায়নি'));
+        }
+
+        $empId = htmlspecialchars($emp['id']);
+        $name = htmlspecialchars($emp['name'] ?? '');
+        $dept = htmlspecialchars($emp['department'] ?? '');
+        $desig = htmlspecialchars($emp['designation'] ?? '');
+        $salary = (float) ($emp['salary'] ?? 0);
+        $status = $emp['status'] ?? 'active';
+
+        $body = '
+        <div style="max-width:680px; margin:0 auto;">
+            <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">✏️ কর্মী তথ্য সম্পাদনা: ' . $empId . '</h2>
+                    <p style="margin:0; font-size:13px; color:#64748b;">নাম, বিভাগ, পদবি ও বেতন স্কেল পরিবর্তন করুন</p>
+                </div>
+                <a href="/hrm/employees" class="btn btn-secondary">← ফিরে যান</a>
+            </div>
+
+            <div class="card" style="padding:24px;">
+                <form method="POST" action="/hrm/employees/update">
+                    <input type="hidden" name="id" value="' . $empId . '">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">কর্মী কোড</label>
+                            <input type="text" value="' . $empId . '" disabled style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; background:#f1f5f9; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">পুরো নাম</label>
+                            <input type="text" name="name" value="' . $name . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">বিভাগ</label>
+                            <input type="text" name="department" value="' . $dept . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">পদবি</label>
+                            <input type="text" name="designation" value="' . $desig . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">মাসিক বেতন (৳)</label>
+                            <input type="number" step="0.01" name="salary" value="' . $salary . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">স্ট্যাটাস</label>
+                            <select name="status" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;">
+                                <option value="active" ' . ($status === 'active' ? 'selected' : '') . '>স্থায়ী (Active)</option>
+                                <option value="probation" ' . ($status === 'probation' ? 'selected' : '') . '>প্রবেশন (Probation)</option>
+                                <option value="resigned" ' . ($status === 'resigned' ? 'selected' : '') . '>অব্যাহতি (Resigned)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:12px;">
+                        <a href="/hrm/employees" class="btn btn-secondary">বাতিল</a>
+                        <button type="submit" class="btn btn-primary" style="background:#dc2626;">💾 পরিবর্তন সংরক্ষণ করুন</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        ';
+
+        return Response::html(ModuleLayoutHelper::wrap('hrm', 'কর্মী এডিট', $body, '', '', '/hrm/employees'));
+    }
+
+    /**
+     * Update / Create Employee Handler (POST /hrm/employees/update)
+     */
+    public function updateEmployee(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            $id = 'EMP-0' . rand(10, 99);
+        }
+
+        $data = [
+            'id' => $id,
+            'name' => trim((string) $request->input('name', 'Employee')),
+            'department' => trim((string) $request->input('department', 'General')),
+            'designation' => trim((string) $request->input('designation', 'Staff')),
+            'salary' => (float) $request->input('salary', 0.0),
+            'status' => trim((string) $request->input('status', 'active')),
+        ];
+
+        $existing = ModuleDataRepository::find('hrm_employees', 'id', $id);
+        if ($existing) {
+            ModuleDataRepository::update('hrm_employees', 'id', $id, $data);
+            $msg = "কর্মী {$data['name']} এর তথ্য সফলভাবে আপডেট করা হয়েছে।";
+        } else {
+            ModuleDataRepository::insert('hrm_employees', $data);
+            $msg = "নতুন কর্মী {$data['name']} সফলভাবে নিবন্ধিত করা হয়েছে।";
+        }
+
+        if ($request->wantsJson() || $request->isAjax()) {
+            return Response::json(['success' => true, 'message' => $msg, 'data' => $data]);
+        }
+
+        return Response::redirect('/hrm/employees?msg=' . urlencode($msg));
     }
 
     /**

@@ -27,6 +27,8 @@ use NetFusion\Modules\CRM\Controllers\CrmDashboardController;
 
 $router->get('/crm', [CrmDashboardController::class, 'index'])->name('crm.dashboard');
 $router->get('/crm/leads', [CrmDashboardController::class, 'leads'])->name('crm.leads');
+$router->get('/crm/leads/edit', [CrmDashboardController::class, 'editLead'])->name('crm.leads.edit');
+$router->post('/crm/leads/update', [CrmDashboardController::class, 'updateLead'])->name('crm.leads.update');
 $router->get('/crm/deals', [CrmDashboardController::class, 'deals'])->name('crm.deals');
 $router->get('/crm/companies', [CrmDashboardController::class, 'companies'])->name('crm.companies');
 $router->get('/crm/contacts', [CrmDashboardController::class, 'contacts'])->name('crm.contacts');

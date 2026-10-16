@@ -1,0 +1,38 @@
+[
+    {
+        "id": "starter",
+        "name": "Starter Tier",
+        "price": 1999,
+        "interval": "মাসিক",
+        "users": "৫ জন ইউজার অ্যাক্সেস",
+        "features": "১টি টেন্যান্ট ডেটাবেস, বেসিক অ্যাকাউন্টিং ও ইনভয়েস, ইমেইল সাপোর্ট",
+        "status": "active"
+    },
+    {
+        "id": "pro",
+        "name": "Professional Pro",
+        "price": 4999,
+        "interval": "মাসিক",
+        "users": "২৫ জন ইউজার অ্যাক্সেস",
+        "features": "৫টি ব্রাঞ্চ সাপোর্ট, অ্যাকাউন্টিং, বিলিং, সিআরএম মডিউল, প্রায়োরিটি সাপোর্ট",
+        "status": "active"
+    },
+    {
+        "id": "enterprise",
+        "name": "Enterprise Suite",
+        "price": 9999,
+        "interval": "মাসিক",
+        "users": "আনলিমিটেড ইউজার ও রোলস",
+        "features": "মাল্টি-টেন্যান্ট আইসোলেশন ইঞ্জিন, সকল HMVC মডিউল সক্রিয়, ২৪/৭ ডেডিকেটেড এসএলএ",
+        "status": "active"
+    },
+    {
+        "id": "custom",
+        "name": "Custom Enterprise",
+        "price": 24999,
+        "interval": "কাস্টম",
+        "users": "কাস্টম ডেডিকেটেড ক্লাস্টার",
+        "features": "অন-প্রিমিসেস ডেডিকেটেড ক্লাস্টার, কাস্টম মডিউল ডেভেলপমেন্ট, হোয়াইট-লেবেল ব্রান্ডিং",
+        "status": "active"
+    }
+]

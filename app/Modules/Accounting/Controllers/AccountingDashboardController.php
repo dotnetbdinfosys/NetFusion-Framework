@@ -25,6 +25,7 @@ namespace NetFusion\Modules\Accounting\Controllers;
 use NetFusion\Core\Http\Request;
 use NetFusion\Core\Http\Response;
 use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
+use NetFusion\App\Services\ModuleDataRepository;
 
 class AccountingDashboardController
 {
@@ -327,17 +328,72 @@ class AccountingDashboardController
     }
 
     /**
-     * Journal Entries Page
+     * Journal Entries Page - Fully Functional & Editable
      */
     public function journal(Request $request): Response
     {
+        $entries = ModuleDataRepository::all('accounting_journal');
+        $flashMsg = $request->query('msg');
+        $flashAlert = '';
+        if ($flashMsg) {
+            $flashAlert = '
+            <div style="padding: 12px 16px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 6px; margin-bottom: 20px; color: #065f46; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center;">
+                <span>✅ ' . htmlspecialchars($flashMsg) . '</span>
+                <span style="cursor: pointer;" onclick="this.parentElement.style.display=\'none\'">✕</span>
+            </div>';
+        }
+
+        $rowsHtml = '';
+        foreach ($entries as $entry) {
+            $vNo = htmlspecialchars($entry['voucher_no'] ?? $entry['id'] ?? '');
+            $date = htmlspecialchars($entry['date'] ?? date('Y-m-d'));
+            $debitAcc = htmlspecialchars($entry['debit_account'] ?? '');
+            $creditAcc = htmlspecialchars($entry['credit_account'] ?? '');
+            $desc = htmlspecialchars($entry['description'] ?? '');
+            $debitAmount = (float) ($entry['debit_amount'] ?? $entry['amount'] ?? 0);
+            $creditAmount = (float) ($entry['credit_amount'] ?? $entry['amount'] ?? $debitAmount);
+            $status = $entry['status'] ?? 'posted';
+
+            $badgeType = match ($status) {
+                'posted' => 'success',
+                'draft' => 'warning',
+                default => 'secondary',
+            };
+
+            $statusText = match ($status) {
+                'posted' => 'পোস্টেড (Posted)',
+                'draft' => 'ড্রাফট (Draft)',
+                default => 'রিভার্সড (Reversed)',
+            };
+
+            $jsonAttr = htmlspecialchars(json_encode($entry, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+
+            $rowsHtml .= '
+            <tr id="row-' . $vNo . '">
+                <td><strong>' . $vNo . '</strong></td>
+                <td>' . $date . '</td>
+                <td>' . $debitAcc . '<br><span style="color:#64748b;">' . $creditAcc . '</span></td>
+                <td>' . $desc . '</td>
+                <td style="text-align:right; font-weight:600; color:#065f46;">' . ModuleLayoutHelper::currency($debitAmount) . '<br>-</td>
+                <td style="text-align:right; font-weight:600; color:#065f46;">-<br>' . ModuleLayoutHelper::currency($creditAmount) . '</td>
+                <td>' . ModuleLayoutHelper::badge($statusText, $badgeType) . '</td>
+                <td>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#1e40af; border-color:#bfdbfe;" onclick=\'openEditJournalModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
+                        <a href="/accounting/journal/edit?id=' . urlencode($vNo) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
+                    </div>
+                </td>
+            </tr>';
+        }
+
         $body = '
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        ' . $flashAlert . '
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
             <div>
                 <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">📝 জার্নাল ভাউচার এন্ট্রি (General Journal)</h2>
-                <p style="margin:0; font-size:13px; color:#64748b;">সকল ডাবল-এন্ট্রি লেনদেনের সময়ানুক্রমিক রেকর্ড</p>
+                <p style="margin:0; font-size:13px; color:#64748b;">সকল ডাবল-এন্ট্রি লেনদেনের সময়ানুক্রমিক রেকর্ড ও ভাউচার সম্পাদন</p>
             </div>
-            <button class="btn btn-primary" onclick="alert(\'নতুন ভাউচার ক্রিয়েট ডায়ালগ...\')">+ নতুন জার্নাল ভাউচার</button>
+            <button class="btn btn-primary" onclick="openNewJournalModal()">+ নতুন জার্নাল ভাউচার</button>
         </div>
 
         <div class="card">
@@ -352,43 +408,265 @@ class AccountingDashboardController
                             <th style="text-align:right;">ডেবিট (৳)</th>
                             <th style="text-align:right;">ক্রেডিট (৳)</th>
                             <th>পোস্টিং</th>
+                            <th>অ্যাকশন</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr style="background:#fafafa;">
-                            <td><strong>JV-2026-092</strong></td>
-                            <td>২০২৬-১০-১৫</td>
-                            <td>1010-01 সিটি ব্যাংক<br><span style="color:#64748b;">4010-01 সফটওয়্যার সেলস</span></td>
-                            <td>ইনভয়েস #104 এর বিপরীতে সফটওয়্যার ডেলিভারি বাবদ পূর্ণ অর্থ প্রাপ্তি।</td>
-                            <td style="text-align:right; font-weight:600; color:#065f46;">৳ ৫০,০০০.০০<br>-</td>
-                            <td style="text-align:right; font-weight:600; color:#065f46;">-<br>৳ ৫০,০০০.০০</td>
-                            <td>' . ModuleLayoutHelper::badge('পোস্টেড', 'success') . '</td>
-                        </tr>
-                        <tr>
-                            <td><strong>JV-2026-091</strong></td>
-                            <td>২০২৬-১০-১৪</td>
-                            <td>5010-01 সার্ভার খরচ<br><span style="color:#64748b;">1010-01 সিটি ব্যাংক</span></td>
-                            <td>AWS ক্লাউড ডেডিকেটেড সার্ভার মাসিক ইনফ্রাস্ট্রাকচার চার্জ পরিশোধ।</td>
-                            <td style="text-align:right; font-weight:600; color:#991b1b;">৳ ১২,৪০০.০০<br>-</td>
-                            <td style="text-align:right; font-weight:600; color:#991b1b;">-<br>৳ ১২,৪০০.০০</td>
-                            <td>' . ModuleLayoutHelper::badge('পোস্টেড', 'success') . '</td>
-                        </tr>
-                        <tr style="background:#fafafa;">
-                            <td><strong>JV-2026-090</strong></td>
-                            <td>২০২৬-১০-১৩</td>
-                            <td>5020-01 অফিস স্টেশনারি<br><span style="color:#64748b;">1010-03 পেটি ক্যাশ</span></td>
-                            <td>প্রিন্টার টোনার ও অফিস পেপার ক্রয় বাবদ ক্যাশ ভাউচার অনুমোদন।</td>
-                            <td style="text-align:right; font-weight:600; color:#991b1b;">৳ ৪,২০০.০০<br>-</td>
-                            <td style="text-align:right; font-weight:600; color:#991b1b;">-<br>৳ ৪,২০০.০০</td>
-                            <td>' . ModuleLayoutHelper::badge('পোস্টেড', 'success') . '</td>
-                        </tr>
+                        ' . $rowsHtml . '
                     </tbody>
                 </table>
             </div>
         </div>
+
+        <!-- ══ EDIT JOURNAL MODAL ══ -->
+        <div id="journalModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; backdrop-filter:blur(3px); align-items:center; justify-content:center; padding:16px;">
+            <div style="background:#fff; border-radius:12px; width:100%; max-width:540px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.15); overflow:hidden;">
+                <div style="padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc;">
+                    <h3 id="journalModalTitle" style="margin:0; font-size:16px; font-weight:700;">✏️ জার্নাল ভাউচার এন্ট্রি এডিট</h3>
+                    <button type="button" onclick="closeJournalModal()" style="border:none; background:transparent; font-size:18px; cursor:pointer;">✕</button>
+                </div>
+                <form id="journalForm" method="POST" action="/accounting/journal/update" style="padding:20px;" onsubmit="handleJournalSubmit(event)">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">ভাউচার নম্বর *</label>
+                            <input type="text" id="jv_voucherno" name="voucher_no" readonly required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#f1f5f9; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">লেনদেনের তারিখ *</label>
+                            <input type="date" id="jv_date" name="date" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">ডেবিট হিসাব খাত (Debit Account) *</label>
+                        <input type="text" id="jv_debit_account" name="debit_account" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                    </div>
+
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">ক্রেডিট হিসাব খাত (Credit Account) *</label>
+                        <input type="text" id="jv_credit_account" name="credit_account" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">টাকার পরিমাণ (৳) *</label>
+                            <input type="number" step="0.01" id="jv_amount" name="amount" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">পোস্টিং স্ট্যাটাস</label>
+                            <select id="jv_status" name="status" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:600;">
+                                <option value="posted">পোস্টেড (Posted)</option>
+                                <option value="draft">ড্রাফট (Draft)</option>
+                                <option value="reversed">রিভার্সড (Reversed)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:20px;">
+                        <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">বিবরণ / Narration *</label>
+                        <textarea id="jv_description" name="description" rows="2" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;"></textarea>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button type="button" class="btn btn-secondary" onclick="closeJournalModal()">বাতিল</button>
+                        <button type="submit" id="saveJournalBtn" class="btn btn-primary">💾 সংরক্ষণ করুন</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+        function openEditJournalModal(item) {
+            document.getElementById("journalModalTitle").innerText = "✏️ ভাউচার এডিট: " + (item.voucher_no || item.id);
+            document.getElementById("jv_voucherno").value = item.voucher_no || item.id || "";
+            document.getElementById("jv_voucherno").readOnly = true;
+            document.getElementById("jv_date").value = item.date || new Date().toISOString().split("T")[0];
+            document.getElementById("jv_debit_account").value = item.debit_account || "";
+            document.getElementById("jv_credit_account").value = item.credit_account || "";
+            document.getElementById("jv_amount").value = item.debit_amount || item.amount || 0;
+            document.getElementById("jv_status").value = item.status || "posted";
+            document.getElementById("jv_description").value = item.description || "";
+            document.getElementById("journalModal").style.display = "flex";
+        }
+
+        function openNewJournalModal() {
+            const nextVoucher = "JV-2026-" + Math.floor(100 + Math.random() * 900);
+            document.getElementById("journalModalTitle").innerText = "➕ নতুন জার্নাল ভাউচার এন্ট্রি";
+            document.getElementById("jv_voucherno").value = nextVoucher;
+            document.getElementById("jv_voucherno").readOnly = false;
+            document.getElementById("jv_date").value = new Date().toISOString().split("T")[0];
+            document.getElementById("jv_debit_account").value = "1010-01 সিটি ব্যাংক";
+            document.getElementById("jv_credit_account").value = "4010-01 সফটওয়্যার সেলস";
+            document.getElementById("jv_amount").value = 10000.00;
+            document.getElementById("jv_status").value = "posted";
+            document.getElementById("jv_description").value = "সাধারণ ব্যবসায়িক প্রাপ্তি/ব্যয় লেনদেন ভাউচার।";
+            document.getElementById("journalModal").style.display = "flex";
+        }
+
+        function closeJournalModal() {
+            document.getElementById("journalModal").style.display = "none";
+        }
+
+        async function handleJournalSubmit(e) {
+            e.preventDefault();
+            const btn = document.getElementById("saveJournalBtn");
+            btn.disabled = true;
+            btn.innerText = "সংরক্ষণ হচ্ছে...";
+
+            const form = document.getElementById("journalForm");
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch("/accounting/journal/update", {
+                    method: "POST",
+                    headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+                    body: formData
+                });
+                const res = await response.json();
+                if (res.success) {
+                    alert("✅ " + res.message);
+                    window.location.reload();
+                } else {
+                    alert("❌ ত্রুটি: " + (res.message || "সংরক্ষণ করা যায়নি"));
+                }
+            } catch (err) {
+                form.submit();
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "💾 সংরক্ষণ করুন";
+            }
+        }
+        </script>
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('accounting', 'জার্নাল এন্ট্রি', $body, '', '', '/accounting/journal'));
+    }
+
+    /**
+     * Standalone Edit Journal Entry Page (GET /accounting/journal/edit?id=...)
+     */
+    public function editJournalEntry(Request $request): Response
+    {
+        $id = (string) $request->query('id', '');
+        $entry = ModuleDataRepository::find('accounting_journal', 'id', $id);
+
+        if (!$entry) {
+            return Response::redirect('/accounting/journal?msg=' . urlencode('জার্নাল ভাউচার পাওয়া যায়নি'));
+        }
+
+        $vNo = htmlspecialchars($entry['voucher_no'] ?? $entry['id']);
+        $date = htmlspecialchars($entry['date'] ?? date('Y-m-d'));
+        $debitAcc = htmlspecialchars($entry['debit_account'] ?? '');
+        $creditAcc = htmlspecialchars($entry['credit_account'] ?? '');
+        $desc = htmlspecialchars($entry['description'] ?? '');
+        $amount = (float) ($entry['debit_amount'] ?? $entry['amount'] ?? 0);
+        $status = $entry['status'] ?? 'posted';
+
+        $body = '
+        <div style="max-width:680px; margin:0 auto;">
+            <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">✏️ জার্নাল ভাউচার সম্পাদনা: ' . $vNo . '</h2>
+                    <p style="margin:0; font-size:13px; color:#64748b;">হিসাব খাত, ডেবিট/ক্রেডিট পরিমাণ ও বিবরণী পরিবর্তন করুন</p>
+                </div>
+                <a href="/accounting/journal" class="btn btn-secondary">← ফিরে যান</a>
+            </div>
+
+            <div class="card" style="padding:24px;">
+                <form method="POST" action="/accounting/journal/update">
+                    <input type="hidden" name="voucher_no" value="' . $vNo . '">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">ভাউচার নম্বর</label>
+                            <input type="text" value="' . $vNo . '" disabled style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; background:#f1f5f9; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">লেনদেনের তারিখ</label>
+                            <input type="date" name="date" value="' . $date . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">ডেবিট হিসাব খাত</label>
+                        <input type="text" name="debit_account" value="' . $debitAcc . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">ক্রেডিট হিসাব খাত</label>
+                        <input type="text" name="credit_account" value="' . $creditAcc . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">টাকার পরিমাণ (৳)</label>
+                            <input type="number" step="0.01" name="amount" value="' . $amount . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">পোস্টিং স্ট্যাটাস</label>
+                            <select name="status" style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;">
+                                <option value="posted" ' . ($status === 'posted' ? 'selected' : '') . '>পোস্টেড (Posted)</option>
+                                <option value="draft" ' . ($status === 'draft' ? 'selected' : '') . '>ড্রাফট (Draft)</option>
+                                <option value="reversed" ' . ($status === 'reversed' ? 'selected' : '') . '>রিভার্সড (Reversed)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:24px;">
+                        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">বিবরণ / Narration</label>
+                        <textarea name="description" rows="3" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">' . $desc . '</textarea>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:12px;">
+                        <a href="/accounting/journal" class="btn btn-secondary">বাতিল</a>
+                        <button type="submit" class="btn btn-primary">💾 পরিবর্তন সংরক্ষণ করুন</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        ';
+
+        return Response::html(ModuleLayoutHelper::wrap('accounting', 'জার্নাল এডিট', $body, '', '', '/accounting/journal'));
+    }
+
+    /**
+     * Update / Create Journal Entry Handler (POST /accounting/journal/update)
+     */
+    public function updateJournalEntry(Request $request): Response
+    {
+        $vNo = trim((string) $request->input('voucher_no', ''));
+        if ($vNo === '') {
+            $vNo = 'JV-2026-' . strtoupper(bin2hex(random_bytes(3)));
+        }
+
+        $amount = (float) $request->input('amount', 0.0);
+        $data = [
+            'id' => $vNo,
+            'voucher_no' => $vNo,
+            'date' => trim((string) $request->input('date', date('Y-m-d'))),
+            'debit_account' => trim((string) $request->input('debit_account', '1010-01 সিটি ব্যাংক')),
+            'credit_account' => trim((string) $request->input('credit_account', '4010-01 সফটওয়্যার সেলস')),
+            'description' => trim((string) $request->input('description', 'সাধারণ লেনদেন')),
+            'debit_amount' => $amount,
+            'credit_amount' => $amount,
+            'amount' => $amount,
+            'status' => trim((string) $request->input('status', 'posted')),
+        ];
+
+        $existing = ModuleDataRepository::find('accounting_journal', 'id', $vNo);
+        if ($existing) {
+            ModuleDataRepository::update('accounting_journal', 'id', $vNo, $data);
+            $msg = "জার্নাল ভাউচার {$vNo} সফলভাবে আপডেট করা হয়েছে।";
+        } else {
+            ModuleDataRepository::insert('accounting_journal', $data);
+            $msg = "নতুন জার্নাল ভাউচার {$vNo} সফলভাবে তৈরি করা হয়েছে।";
+        }
+
+        if ($request->wantsJson() || $request->isAjax()) {
+            return Response::json(['success' => true, 'message' => $msg, 'data' => $data]);
+        }
+
+        return Response::redirect('/accounting/journal?msg=' . urlencode($msg));
     }
 
     /**

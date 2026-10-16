@@ -25,6 +25,7 @@ namespace NetFusion\Modules\CRM\Controllers;
 use NetFusion\Core\Http\Request;
 use NetFusion\Core\Http\Response;
 use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
+use NetFusion\App\Services\ModuleDataRepository;
 
 class CrmDashboardController
 {
@@ -186,17 +187,58 @@ class CrmDashboardController
     }
 
     /**
-     * Leads Page
+     * Leads Page - Fully Functional & Editable
      */
     public function leads(Request $request): Response
     {
+        $leads = ModuleDataRepository::all('crm_leads');
+        $flashMsg = $request->query('msg');
+        $flashAlert = '';
+        if ($flashMsg) {
+            $flashAlert = '
+            <div style="padding: 12px 16px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 6px; margin-bottom: 20px; color: #065f46; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center;">
+                <span>✅ ' . htmlspecialchars($flashMsg) . '</span>
+                <span style="cursor: pointer;" onclick="this.parentElement.style.display=\'none\'">✕</span>
+            </div>';
+        }
+
+        $rowsHtml = '';
+        foreach ($leads as $lead) {
+            $id = htmlspecialchars($lead['id'] ?? '');
+            $name = htmlspecialchars($lead['name'] ?? '');
+            $company = htmlspecialchars($lead['company'] ?? '');
+            $phone = htmlspecialchars($lead['phone'] ?? '');
+            $val = (float) ($lead['value'] ?? 0);
+            $stage = htmlspecialchars($lead['stage'] ?? 'নতুন লিড');
+
+            $jsonAttr = htmlspecialchars(json_encode($lead, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
+
+            $rowsHtml .= '
+            <tr id="row-' . $id . '">
+                <td><code>' . $id . '</code></td>
+                <td><strong>' . $name . '</strong></td>
+                <td>' . $company . '</td>
+                <td>' . $phone . '</td>
+                <td>' . ModuleLayoutHelper::badge($stage, 'info') . '</td>
+                <td style="text-align:right; font-weight:700; color:#065f46;">' . ModuleLayoutHelper::currency($val) . '</td>
+                <td>' . ModuleLayoutHelper::badge('সক্রিয়', 'success') . '</td>
+                <td>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#059669; border-color:#a7f3d0;" onclick=\'openEditLeadModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
+                        <a href="/crm/leads/edit?id=' . urlencode($id) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
+                    </div>
+                </td>
+            </tr>';
+        }
+
         $body = '
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        ' . $flashAlert . '
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
             <div>
                 <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">🎯 লিড ম্যানেজমেন্ট (Lead Registry)</h2>
-                <p style="margin:0; font-size:13px; color:#64748b;">সকল সম্ভাব্য ক্লায়েন্ট ও সেলস অপরচুনিটি ট্র্যাকিং</p>
+                <p style="margin:0; font-size:13px; color:#64748b;">সকল সম্ভাব্য ক্লায়েন্ট, যোগাযোগ, অপরচুনিটি ভ্যালু ও স্ট্যাটাস সম্পাদন</p>
             </div>
-            <button class="btn btn-primary" style="background:#059669;" onclick="alert(\'নতুন লিড যুক্ত করার উইন্ডো...\')">+ নতুন লিড অ্যাড করুন</button>
+            <button class="btn btn-primary" style="background:#059669;" onclick="openNewLeadModal()">+ নতুন লিড অ্যাড করুন</button>
         </div>
 
         <div class="card">
@@ -208,24 +250,245 @@ class CrmDashboardController
                             <th>নাম</th>
                             <th>প্রতিষ্ঠান</th>
                             <th>ইমেইল / ফোন</th>
-                            <th>উৎস (Source)</th>
+                            <th>পর্যায় (Stage)</th>
                             <th style="text-align:right;">সম্ভাব্য ভ্যালু</th>
                             <th>স্ট্যাটাস</th>
                             <th>অ্যাকশন</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td><code>LD-01</code></td><td><strong>তানভীর আহমেদ</strong></td><td>প্রাইম টেক লিমিটেড</td><td>tanvir@primetech.bd<br>+880 1711-223344</td><td>ওয়েবসাইট ফর্ম</td><td style="text-align:right; font-weight:700; color:#065f46;">৳ ৭৫,০০০.০০</td><td>' . ModuleLayoutHelper::badge('নতুন', 'info') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
-                        <tr><td><code>LD-02</code></td><td><strong>নুসরাত জাহান</strong></td><td>এলিট ফ্যাশনস</td><td>nusrat@elitefashion.com<br>+880 1819-334455</td><td>লিংকডইন ইনবক্স</td><td style="text-align:right; font-weight:700; color:#065f46;">৳ ৪৫,০০০.০০</td><td>' . ModuleLayoutHelper::badge('কন্টাক্টেড', 'warning') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
-                        <tr><td><code>LD-03</code></td><td><strong>মাহমুদুল হাসান</strong></td><td>স্কাইলাইন লজিস্টিকস</td><td>hasan@skyline.bd<br>+880 1912-778899</td><td>রেফারেল পার্টনার</td><td style="text-align:right; font-weight:700; color:#065f46;">৳ ১,২০,০০০.০০</td><td>' . ModuleLayoutHelper::badge('কোয়ালিফাইড', 'success') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
-                        <tr><td><code>LD-04</code></td><td><strong>ফারহানা ইসলাম</strong></td><td>গ্রীন ভ্যালি এগ্রো</td><td>farhana@greenvalley.bd<br>+880 1610-998877</td><td>ফেসবুক অ্যাডস</td><td style="text-align:right; font-weight:700; color:#065f46;">৳ ৩৫,০০০.০০</td><td>' . ModuleLayoutHelper::badge('প্রস্তাবনা পাঠানো', 'warning') . '</td><td><button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;">প্রোফাইল</button></td></tr>
+                        ' . $rowsHtml . '
                     </tbody>
                 </table>
             </div>
         </div>
+
+        <!-- ══ EDIT LEAD MODAL ══ -->
+        <div id="leadModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; backdrop-filter:blur(3px); align-items:center; justify-content:center; padding:16px;">
+            <div style="background:#fff; border-radius:12px; width:100%; max-width:520px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.15); overflow:hidden;">
+                <div style="padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc;">
+                    <h3 id="leadModalTitle" style="margin:0; font-size:16px; font-weight:700;">✏️ লিড তথ্য এডিট করুন</h3>
+                    <button type="button" onclick="closeLeadModal()" style="border:none; background:transparent; font-size:18px; cursor:pointer;">✕</button>
+                </div>
+                <form id="leadForm" method="POST" action="/crm/leads/update" style="padding:20px;" onsubmit="handleLeadSubmit(event)">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">লিড আইডি *</label>
+                            <input type="text" id="ld_id" name="id" readonly required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; background:#f1f5f9; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">ক্লায়েন্ট নাম *</label>
+                            <input type="text" id="ld_name" name="name" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:600;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">প্রতিষ্ঠান / কোম্পানি</label>
+                            <input type="text" id="ld_company" name="company" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">ফোন / মোবাইল *</label>
+                            <input type="text" id="ld_phone" name="phone" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px;">
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">সম্ভাব্য ভ্যালু (৳) *</label>
+                            <input type="number" step="0.01" id="ld_value" name="value" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">পাইপলাইন পর্যায়</label>
+                            <input type="text" id="ld_stage" name="stage" required style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button type="button" class="btn btn-secondary" onclick="closeLeadModal()">বাতিল</button>
+                        <button type="submit" id="saveLeadBtn" class="btn btn-primary" style="background:#059669;">💾 সংরক্ষণ করুন</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+        function openEditLeadModal(item) {
+            document.getElementById("leadModalTitle").innerText = "✏️ লিড এডিট: " + item.name;
+            document.getElementById("ld_id").value = item.id || "";
+            document.getElementById("ld_id").readOnly = true;
+            document.getElementById("ld_name").value = item.name || "";
+            document.getElementById("ld_company").value = item.company || "";
+            document.getElementById("ld_phone").value = item.phone || "";
+            document.getElementById("ld_value").value = item.value || 0;
+            document.getElementById("ld_stage").value = item.stage || "Proposal";
+            document.getElementById("leadModal").style.display = "flex";
+        }
+
+        function openNewLeadModal() {
+            const nextId = "LD-" + Math.floor(100 + Math.random() * 900);
+            document.getElementById("leadModalTitle").innerText = "➕ নতুন লিড যোগ করুন";
+            document.getElementById("ld_id").value = nextId;
+            document.getElementById("ld_id").readOnly = false;
+            document.getElementById("ld_name").value = "";
+            document.getElementById("ld_company").value = "";
+            document.getElementById("ld_phone").value = "+880 1";
+            document.getElementById("ld_value").value = 100000.00;
+            document.getElementById("ld_stage").value = "New Lead";
+            document.getElementById("leadModal").style.display = "flex";
+        }
+
+        function closeLeadModal() {
+            document.getElementById("leadModal").style.display = "none";
+        }
+
+        async function handleLeadSubmit(e) {
+            e.preventDefault();
+            const btn = document.getElementById("saveLeadBtn");
+            btn.disabled = true;
+            btn.innerText = "সংরক্ষণ হচ্ছে...";
+
+            const form = document.getElementById("leadForm");
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch("/crm/leads/update", {
+                    method: "POST",
+                    headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+                    body: formData
+                });
+                const res = await response.json();
+                if (res.success) {
+                    alert("✅ " + res.message);
+                    window.location.reload();
+                } else {
+                    alert("❌ ত্রুটি: " + (res.message || "সংরক্ষণ করা যায়নি"));
+                }
+            } catch (err) {
+                form.submit();
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "💾 সংরক্ষণ করুন";
+            }
+        }
+        </script>
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('crm', 'লিড ম্যানেজমেন্ট', $body, '', '', '/crm/leads'));
+    }
+
+    /**
+     * Standalone Edit Lead Page (GET /crm/leads/edit?id=...)
+     */
+    public function editLead(Request $request): Response
+    {
+        $id = (string) $request->query('id', '');
+        $lead = ModuleDataRepository::find('crm_leads', 'id', $id);
+
+        if (!$lead) {
+            return Response::redirect('/crm/leads?msg=' . urlencode('লিড পাওয়া যায়নি'));
+        }
+
+        $ldId = htmlspecialchars($lead['id']);
+        $name = htmlspecialchars($lead['name'] ?? '');
+        $company = htmlspecialchars($lead['company'] ?? '');
+        $phone = htmlspecialchars($lead['phone'] ?? '');
+        $val = (float) ($lead['value'] ?? 0);
+        $stage = htmlspecialchars($lead['stage'] ?? '');
+
+        $body = '
+        <div style="max-width:680px; margin:0 auto;">
+            <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">✏️ লিড সম্পাদনা: ' . $ldId . '</h2>
+                    <p style="margin:0; font-size:13px; color:#64748b;">ক্লায়েন্ট নাম, প্রতিষ্ঠান, যোগাযোগ ও অপরচুনিটি ভ্যালু পরিবর্তন করুন</p>
+                </div>
+                <a href="/crm/leads" class="btn btn-secondary">← ফিরে যান</a>
+            </div>
+
+            <div class="card" style="padding:24px;">
+                <form method="POST" action="/crm/leads/update">
+                    <input type="hidden" name="id" value="' . $ldId . '">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">লিড আইডি</label>
+                            <input type="text" value="' . $ldId . '" disabled style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; background:#f1f5f9; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">ক্লায়েন্টের নাম</label>
+                            <input type="text" name="name" value="' . $name . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">প্রতিষ্ঠান</label>
+                            <input type="text" name="company" value="' . $company . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">মোবাইল নম্বর</label>
+                            <input type="text" name="phone" value="' . $phone . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">সম্ভাব্য ভ্যালু (৳)</label>
+                            <input type="number" step="0.01" name="value" value="' . $val . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">পাইপলাইন পর্যায়</label>
+                            <input type="text" name="stage" value="' . $stage . '" required style="width:100%; box-sizing:border-box; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px;">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:12px;">
+                        <a href="/crm/leads" class="btn btn-secondary">বাতিল</a>
+                        <button type="submit" class="btn btn-primary" style="background:#059669;">💾 পরিবর্তন সংরক্ষণ করুন</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        ';
+
+        return Response::html(ModuleLayoutHelper::wrap('crm', 'লিড এডিট', $body, '', '', '/crm/leads'));
+    }
+
+    /**
+     * Update / Create Lead Handler (POST /crm/leads/update)
+     */
+    public function updateLead(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            $id = 'LD-' . rand(100, 999);
+        }
+
+        $data = [
+            'id' => $id,
+            'name' => trim((string) $request->input('name', 'Lead Name')),
+            'company' => trim((string) $request->input('company', '')),
+            'phone' => trim((string) $request->input('phone', '')),
+            'value' => (float) $request->input('value', 0.0),
+            'stage' => trim((string) $request->input('stage', 'New Lead')),
+            'status' => 'active',
+        ];
+
+        $existing = ModuleDataRepository::find('crm_leads', 'id', $id);
+        if ($existing) {
+            ModuleDataRepository::update('crm_leads', 'id', $id, $data);
+            $msg = "লিড {$data['name']} সফলভাবে আপডেট করা হয়েছে।";
+        } else {
+            ModuleDataRepository::insert('crm_leads', $data);
+            $msg = "নতুন লিড {$data['name']} সফলভাবে যোগ করা হয়েছে।";
+        }
+
+        if ($request->wantsJson() || $request->isAjax()) {
+            return Response::json(['success' => true, 'message' => $msg, 'data' => $data]);
+        }
+
+        return Response::redirect('/crm/leads?msg=' . urlencode($msg));
     }
 
     /**
