@@ -846,12 +846,14 @@ class DashboardController
             'sys_engine'     => $isBn ? 'সিস্টেম কনট্রোল (Engine)' : 'System Engine',
             'telemetry'      => $isBn ? 'টেলিমেট্রি (Diagnostics)' : 'Diagnostics & Telemetry',
             'health'         => $isBn ? 'সিস্টেম হেলথ (Health Dashboard)' : 'System Health',
+            'upload_module'  => $isBn ? 'মডিউল/এক্সটেনশন আপলোড' : 'Upload Module/Ext',
             'installer'      => $isBn ? 'ইনস্টলার উইজার্ড (Installer)' : 'Installer Wizard',
             'tenant_lbl'     => $isBn ? '🏢 টেন্যান্ট:' : '🏢 Tenant:',
             'customization'  => $isBn ? 'কাস্টমাইজেশন ও ব্র্যান্ডিং' : 'Customization & Branding',
             'btn_settings'   => $isBn ? 'সাইট সেটিংস' : 'Site Settings',
             'btn_new_tenant' => $isBn ? '➕ নতুন টেন্যান্ট' : '➕ New Tenant',
             'btn_new_user'   => $isBn ? '👤 নতুন ইউজার' : '👤 New User',
+            'btn_upload_module' => $isBn ? '📤 মডিউল আপলোড' : '📤 Upload Module',
             'active_tenants' => $isBn ? 'সক্রিয় টেন্যান্টস (Tenancy)' : 'Active Tenants (Tenancy)',
             'active_modules' => $isBn ? 'মডিউল স্ট্যাটাস (HMVC)' : 'Active Modules (HMVC)',
             'active_roles'   => $isBn ? 'ইউজার ভ্যারিয়েন্টস (RBAC)' : 'User Variants (RBAC)',
@@ -1599,6 +1601,9 @@ HTML;
                 </a>
 
                 <div class="menu-label">{$txt['sys_engine']}</div>
+                <a href="/system/modules/upload" class="nav-item">
+                    <span class="nav-icon">📤</span> {$txt['upload_module']}
+                </a>
                 <a href="#telemetry" class="nav-item">
                     <span class="nav-icon">🩺</span> {$txt['telemetry']}
                 </a>
@@ -1738,7 +1743,12 @@ HTML;
                     <div class="section-title">
                         <span>📦</span> {$txt['modules_title']}
                     </div>
-                    <span style="font-size:12px; color:var(--text-muted);">{$txt['modules_hint']}</span>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="font-size:12px; color:var(--text-muted);">{$txt['modules_hint']}</span>
+                        <a href="/system/modules/upload" class="btn btn-sm btn-primary" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;">
+                            {$txt['btn_upload_module']}
+                        </a>
+                    </div>
                 </div>
 
                 <div class="modules-grid" id="modulesGrid">

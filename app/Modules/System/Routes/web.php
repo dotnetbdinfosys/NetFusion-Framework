@@ -28,3 +28,7 @@ use NetFusion\Modules\System\Controllers\SystemController;
 $router->get('/system', [SystemController::class, 'status'])->name('system.index');
 $router->get('/system/status', [SystemController::class, 'status'])->name('system.status');
 $router->get('/system/modules', [SystemController::class, 'modules'])->name('system.modules');
+$router->get('/system/modules/upload', [SystemController::class, 'uploadForm'])->name('system.modules.upload');
+$router->post('/system/modules/upload', [SystemController::class, 'handleUpload'])->name('system.modules.upload.post');
+$router->get('/system/modules/download-sample', [SystemController::class, 'downloadSample'])->name('system.modules.sample');
+

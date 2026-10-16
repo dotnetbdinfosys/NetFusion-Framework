@@ -134,6 +134,7 @@ class ModuleLayoutHelper
             'menu'     => [
                 ['icon' => '⚙️', 'label_en' => 'Dashboard', 'label_bn' => 'ড্যাশবোর্ড', 'url' => '/system/status'],
                 ['icon' => '📦', 'label_en' => 'Modules Inspector', 'label_bn' => 'মডিউল ইনস্পেক্টর', 'url' => '/system/modules'],
+                ['icon' => '📤', 'label_en' => 'Upload Module/Ext', 'label_bn' => 'মডিউল/এক্সটেনশন আপলোড', 'url' => '/system/modules/upload'],
                 ['icon' => '🩺', 'label_en' => 'System Health', 'label_bn' => 'সিস্টেম হেলথ', 'url' => '/health'],
             ],
         ],

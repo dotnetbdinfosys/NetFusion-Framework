@@ -170,6 +170,14 @@ class ModuleLoader
     }
 
     /**
+     * Reset discovery cache so new modules can be registered dynamically.
+     */
+    public function reset(): void
+    {
+        $this->discovered = false;
+    }
+
+    /**
      * Register service providers and module configurations for all discovered modules.
      */
     public function registerModules(): void

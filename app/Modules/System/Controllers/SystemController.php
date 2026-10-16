@@ -25,6 +25,9 @@ namespace NetFusion\Modules\System\Controllers;
 use NetFusion\Core\Http\Request;
 use NetFusion\Core\Http\Response;
 use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
+use NetFusion\App\Http\Helpers\SiteSettingsHelper;
+use DateTimeImmutable;
+use ZipArchive;
 
 class SystemController
 {
@@ -199,13 +202,18 @@ class SystemController
         }
 
         $body = '
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
             <div>
                 <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">📦 HMVC মডিউল ইনস্পেক্টর (Module Registry)</h2>
                 <p style="margin:0; font-size:13px; color:#64748b;">সিস্টেমে স্ক্যানকৃত সকল ডাইনামিক প্লাগইন ও মডিউল তালিকা</p>
             </div>
-            <div style="font-size:13px; background:#f8fafc; border:1px solid #e2e8f0; padding:6px 14px; border-radius:6px;">
-                মোট মডিউল: <strong>' . $totalModules . 'টি</strong> | সক্রিয়: <strong style="color:#059669;">' . $enabledCount . 'টি</strong>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="font-size:13px; background:#f8fafc; border:1px solid #e2e8f0; padding:6px 14px; border-radius:6px;">
+                    মোট মডিউল: <strong>' . $totalModules . 'টি</strong> | সক্রিয়: <strong style="color:#059669;">' . $enabledCount . 'টি</strong>
+                </div>
+                <a href="/system/modules/upload" class="btn btn-primary" style="background:#2563eb; color:#ffffff; padding:7px 14px; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;">
+                    📤 নতুন মডিউল আপলোড
+                </a>
             </div>
         </div>
 
@@ -232,4 +240,847 @@ class SystemController
 
         return Response::html(ModuleLayoutHelper::wrap('system', 'মডিউল ইনস্পেক্টর', $body, '', '', '/system/modules'));
     }
+
+    /**
+     * Module & Extension Upload Page (UI)
+     */
+    public function uploadForm(Request $request): Response
+    {
+        $locale   = SiteSettingsHelper::resolveLocale();
+        $isBn     = ($locale === 'bn');
+
+        $statusMsg = '';
+        $statusType = (string) $request->query('status', '');
+        $msgText    = (string) $request->query('msg', '');
+
+        if ($statusType === 'success') {
+            $statusMsg = '<div style="background:#ecfdf5; border:1px solid #10b981; color:#065f46; padding:14px 18px; border-radius:8px; margin-bottom:20px; font-weight:500;">
+                ✔ ' . htmlspecialchars($msgText ?: 'অপারেশন সফল হয়েছে।') . '
+            </div>';
+        } elseif ($statusType === 'error') {
+            $statusMsg = '<div style="background:#fef2f2; border:1px solid #ef4444; color:#991b1b; padding:14px 18px; border-radius:8px; margin-bottom:20px; font-weight:500;">
+                ⚠ ' . htmlspecialchars($msgText ?: 'একটি ত্রুটি ঘটেছে। অনুগ্রহ করে আবার চেষ্টা করুন।') . '
+            </div>';
+        }
+
+        // Fetch installed modules list for quick summary
+        $baseDir = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'Modules';
+        $moduleDirs = glob($baseDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
+        $installedRows = '';
+        foreach ($moduleDirs as $dir) {
+            $manifestPath = $dir . DIRECTORY_SEPARATOR . 'module.json';
+            $dirName = basename($dir);
+            $modName = $dirName;
+            $modVer  = '1.0.0';
+            $modDesc = 'Module';
+            $enabled = true;
+
+            if (file_exists($manifestPath)) {
+                $m = json_decode((string) file_get_contents($manifestPath), true) ?: [];
+                $modName = $m['name'] ?? $dirName;
+                $modVer  = $m['version'] ?? '1.0.0';
+                $modDesc = $m['description'] ?? $dirName;
+                $enabled = $m['enabled'] ?? true;
+            }
+
+            $badge = $enabled 
+                ? ModuleLayoutHelper::badge($isBn ? 'সক্রিয়' : 'Active', 'success')
+                : ModuleLayoutHelper::badge($isBn ? 'নিষ্ক্রিয়' : 'Disabled', 'danger');
+
+            $installedRows .= sprintf(
+                '<tr>
+                    <td><strong>%s</strong></td>
+                    <td><code>app/Modules/%s</code></td>
+                    <td><code>v%s</code></td>
+                    <td>%s</td>
+                    <td>%s</td>
+                </tr>',
+                htmlspecialchars($modName),
+                htmlspecialchars($dirName),
+                htmlspecialchars($modVer),
+                htmlspecialchars($modDesc),
+                $badge
+            );
+        }
+
+        $headingText = $isBn ? '📤 মডিউল ও এক্সটেনশন আপলোড হাব' : '📤 Module & Extension Upload Hub';
+        $subHeading  = $isBn ? 'নতুন মডিউল প্যাকেজ (.ZIP) আপলোড করুন অথবা ব্রাউজার থেকেই ইনস্ট্যান্ট মডিউল স্কাফোল্ড তৈরি করুন' : 'Upload custom module packages (.ZIP) or scaffold new HMVC extensions directly from the browser.';
+
+        $body = '
+        ' . $statusMsg . '
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h2 style="margin:0 0 4px 0; font-size:22px; font-weight:700; color:#0f172a;">' . $headingText . '</h2>
+                <p style="margin:0; font-size:13.5px; color:#64748b;">' . $subHeading . '</p>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <a href="/system/modules/download-sample" class="btn btn-secondary" style="display:inline-flex; align-items:center; gap:6px; background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:8px 14px; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600;">
+                    📥 ' . ($isBn ? 'স্যাম্পল মডিউল জিপ ডাউনলোড' : 'Download Sample ZIP') . '
+                </a>
+                <a href="/system/modules" class="btn btn-secondary" style="display:inline-flex; align-items:center; gap:6px; background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; padding:8px 14px; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600;">
+                    📦 ' . ($isBn ? 'মডিউল তালিকা' : 'Modules Registry') . '
+                </a>
+            </div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:24px;">
+            <!-- CARD 1: ZIP Upload -->
+            <div class="card">
+                <div class="card-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:14px 18px;">
+                    <span class="card-title" style="font-size:15px; font-weight:700; color:#1e293b;">
+                        📦 ' . ($isBn ? 'মডিউল / এক্সটেনশন প্যাকেজ আপলোড (.ZIP)' : 'Upload Module Package (.ZIP)') . '
+                    </span>
+                </div>
+                <div style="padding: 22px;">
+                    <form id="moduleUploadForm" action="/system/modules/upload" method="POST" enctype="multipart/form-data">
+                        <input type="hidden" name="action" value="upload">
+
+                        <div id="dropZone" style="border: 2px dashed #94a3b8; border-radius: 10px; padding: 32px 20px; text-align: center; background: #f8fafc; cursor: pointer; transition: all 0.2s ease; margin-bottom: 18px;">
+                            <div style="font-size: 38px; margin-bottom: 8px;">📁</div>
+                            <div style="font-weight: 600; font-size: 14.5px; color: #1e293b; margin-bottom: 4px;">
+                                ' . ($isBn ? 'এখানে .ZIP ফাইল টেনে আনুন অথবা ক্লিক করে নির্বাচন করুন' : 'Drag & drop .ZIP file here, or click to browse') . '
+                            </div>
+                            <div style="font-size: 12.5px; color: #64748b;">
+                                ' . ($isBn ? 'শুধুমাত্র অনুমোদিত .ZIP ফরম্যাট (সর্বোচ্চ ৫০ মেগাবাইট)' : 'Accepted formats: .ZIP archive (Max 50MB)') . '
+                            </div>
+                            <input type="file" id="module_zip" name="module_zip" accept=".zip,application/zip,application/x-zip-compressed" style="display:none;" required>
+                            <div id="fileSelectedName" style="display:none; margin-top:12px; font-weight:600; color:#2563eb; background:#eff6ff; padding:6px 12px; border-radius:6px; font-size:13px;"></div>
+                        </div>
+
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px; margin-bottom:18px;">
+                            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:#334155; margin-bottom:8px; cursor:pointer;">
+                                <input type="checkbox" name="overwrite" value="1" style="width:16px; height:16px; accent-color:#2563eb;">
+                                ' . ($isBn ? 'বিদ্যমান মডিউল থাকলে ওভাররাইট/আপগ্রেড অনুমোদন করুন' : 'Allow overwrite/upgrade if module already exists') . '
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:#334155; cursor:pointer;">
+                                <input type="checkbox" name="auto_enable" value="1" checked style="width:16px; height:16px; accent-color:#2563eb;">
+                                ' . ($isBn ? 'ইনস্টলের পর স্বয়ংক্রিয়ভাবে সক্রিয় করুন (Auto-enable on install)' : 'Auto-enable module immediately upon installation') . '
+                            </label>
+                        </div>
+
+                        <button type="submit" id="uploadSubmitBtn" style="width:100%; background:#2563eb; color:#ffffff; font-weight:700; font-size:14px; padding:12px; border:none; border-radius:8px; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:8px; transition:background 0.15s ease;">
+                            🚀 ' . ($isBn ? 'মডিউল আপলোড ও ইনস্টল করুন' : 'Upload & Install Module') . '
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- CARD 2: Instant Scaffold Generator -->
+            <div class="card">
+                <div class="card-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:14px 18px;">
+                    <span class="card-title" style="font-size:15px; font-weight:700; color:#1e293b;">
+                        ⚡ ' . ($isBn ? 'ইনস্ট্যান্ট মডিউল স্কাফোল্ডার (Web Generator)' : 'Instant Module Scaffold Generator') . '
+                    </span>
+                </div>
+                <div style="padding: 22px;">
+                    <form id="scaffoldForm" action="/system/modules/upload" method="POST">
+                        <input type="hidden" name="action" value="scaffold">
+
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                            <div>
+                                <label style="display:block; font-size:12.5px; font-weight:600; color:#475569; margin-bottom:4px;">
+                                    ' . ($isBn ? 'মডিউল নাম (PascalCase)' : 'Module Name (PascalCase)') . ' *
+                                </label>
+                                <input type="text" name="scaffold_name" id="scaffold_name" placeholder="e.g. CourierLogistics" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13.5px;" oninput="updateSlug(this.value)">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:12.5px; font-weight:600; color:#475569; margin-bottom:4px;">
+                                    ' . ($isBn ? 'ইউআরএল স্লাগ (Slug)' : 'URL Slug') . ' *
+                                </label>
+                                <input type="text" name="scaffold_slug" id="scaffold_slug" placeholder="e.g. courier-logistics" required style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13.5px;">
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:12px;">
+                            <label style="display:block; font-size:12.5px; font-weight:600; color:#475569; margin-bottom:4px;">
+                                ' . ($isBn ? 'মডিউল বিবরণ (Description)' : 'Description') . '
+                            </label>
+                            <input type="text" name="scaffold_description" placeholder="e.g. Enterprise Courier and Tracking Hub" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13.5px;">
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:18px;">
+                            <div>
+                                <label style="display:block; font-size:12.5px; font-weight:600; color:#475569; margin-bottom:4px;">
+                                    ' . ($isBn ? 'লেখক / টিম (Author)' : 'Author') . '
+                                </label>
+                                <input type="text" name="scaffold_author" value="DotNetBD Engineering" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13.5px;">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:12.5px; font-weight:600; color:#475569; margin-bottom:4px;">
+                                    ' . ($isBn ? 'আইকন ইমোজি (Icon)' : 'Icon Emoji') . '
+                                </label>
+                                <input type="text" name="scaffold_icon" value="🚀" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:6px; font-size:13.5px;">
+                            </div>
+                        </div>
+
+                        <button type="submit" style="width:100%; background:#059669; color:#ffffff; font-weight:700; font-size:14px; padding:12px; border:none; border-radius:8px; cursor:pointer; display:flex; justify-content:center; align-items:center; gap:8px;">
+                            ⚡ ' . ($isBn ? 'ইনস্ট্যান্ট মডিউল কাঠামো তৈরি করুন' : 'Generate Module Scaffold') . '
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 3: Specifications & Guidelines -->
+        <div class="card" style="margin-bottom:24px;">
+            <div class="card-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:14px 18px;">
+                <span class="card-title" style="font-size:15px; font-weight:700; color:#1e293b;">
+                    📋 ' . ($isBn ? 'NetFusion মডিউল ও এক্সটেনশন প্যাকেজ স্পেসিফিকেশন' : 'NetFusion Module Package Specifications') . '
+                </span>
+            </div>
+            <div style="padding: 22px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; font-size:13px;">
+                    <div>
+                        <h4 style="margin:0 0 8px 0; color:#0f172a; font-size:14px;">📁 ' . ($isBn ? 'প্যাকেজের কাঠামোগত নিয়মাবলী' : 'Archive Package Structure') . '</h4>
+                        <p style="color:#64748b; margin-bottom:10px;">
+                            ' . ($isBn ? 'একটি মডিউল জিপে মূল ফোল্ডার হিসেবে <code>module.json</code> এবং সংশ্লিষ্ট কন্ট্রোলার ও রাউট থাকতে হবে:' : 'A valid module ZIP archive must contain <code>module.json</code> and standard HMVC directories:') . '
+                        </p>
+                        <pre style="background:#0f172a; color:#f8fafc; padding:12px 14px; border-radius:8px; font-size:12px; overflow-x:auto;">
+MyModule.zip
+├── module.json
+├── config.php
+├── Controllers/
+│   └── MyModuleDashboardController.php
+├── Providers/
+│   └── MyModuleServiceProvider.php
+├── Routes/
+│   └── web.php
+└── Views/
+    └── dashboard.php</pre>
+                    </div>
+
+                    <div>
+                        <h4 style="margin:0 0 8px 0; color:#0f172a; font-size:14px;">📄 ' . ($isBn ? 'module.json ম্যানিফেস্ট ফাইল ফরম্যাট' : 'module.json Manifest Schema') . '</h4>
+                        <pre style="background:#0f172a; color:#f8fafc; padding:12px 14px; border-radius:8px; font-size:12px; overflow-x:auto;">
+{
+    "name": "MyModule",
+    "slug": "my-module",
+    "version": "1.0.0",
+    "description": "Custom enterprise extension",
+    "author": "Your Company / Developer",
+    "enabled": true,
+    "priority": 15,
+    "providers": [
+        "NetFusion\\Modules\\MyModule\\Providers\\MyModuleServiceProvider"
+    ]
+}</pre>
+                        <div style="margin-top:12px;">
+                            <a href="/system/modules/download-sample" style="color:#2563eb; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                                📥 ' . ($isBn ? 'রেডিমেড স্যাম্পল মডিউল ডাউনলোড করুন (.ZIP)' : 'Download ready-made Sample Module (.ZIP)') . ' &rarr;
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 4: Current Modules Overview -->
+        <div class="card">
+            <div class="card-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:14px 18px; display:flex; justify-content:space-between; align-items:center;">
+                <span class="card-title" style="font-size:15px; font-weight:700; color:#1e293b;">
+                    🏛️ ' . ($isBn ? 'বর্তমানে ইনস্টলকৃত মডিউলসমূহ' : 'Currently Installed Modules') . '
+                </span>
+                <span style="font-size:12.5px; color:#64748b;">
+                    ' . count($moduleDirs) . ' ' . ($isBn ? 'টি মডিউল লোড করা হয়েছে' : 'modules loaded') . '
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>' . ($isBn ? 'মডিউল নাম' : 'Module Name') . '</th>
+                            <th>' . ($isBn ? 'ইনস্টল লোকেশন' : 'Location') . '</th>
+                            <th>' . ($isBn ? 'ভার্সন' : 'Version') . '</th>
+                            <th>' . ($isBn ? 'বিবরণ' : 'Description') . '</th>
+                            <th>' . ($isBn ? 'স্ট্যাটাস' : 'Status') . '</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ' . $installedRows . '
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        ';
+
+        $extraJs = '
+        <script>
+        const dropZone = document.getElementById("dropZone");
+        const fileInput = document.getElementById("module_zip");
+        const fileSelectedName = document.getElementById("fileSelectedName");
+
+        if (dropZone && fileInput) {
+            dropZone.addEventListener("click", () => fileInput.click());
+
+            dropZone.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = "#2563eb";
+                dropZone.style.background = "#eff6ff";
+            });
+
+            dropZone.addEventListener("dragleave", () => {
+                dropZone.style.borderColor = "#94a3b8";
+                dropZone.style.background = "#f8fafc";
+            });
+
+            dropZone.addEventListener("drop", (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = "#94a3b8";
+                dropZone.style.background = "#f8fafc";
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    updateFileName(e.dataTransfer.files[0]);
+                }
+            });
+
+            fileInput.addEventListener("change", () => {
+                if (fileInput.files.length) {
+                    updateFileName(fileInput.files[0]);
+                }
+            });
+        }
+
+        function updateFileName(file) {
+            if (file && fileSelectedName) {
+                const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+                fileSelectedName.textContent = "✔ নির্বাচিত: " + file.name + " (" + sizeMb + " MB)";
+                fileSelectedName.style.display = "inline-block";
+            }
+        }
+
+        function updateSlug(name) {
+            const slugInput = document.getElementById("scaffold_slug");
+            if (slugInput) {
+                slugInput.value = name.replace(/([a-z])([A-Z])/g, "$1-$2")
+                                      .replace(/[\s_]+/g, "-")
+                                      .toLowerCase();
+            }
+        }
+        </script>
+        ';
+
+        return Response::html(ModuleLayoutHelper::wrap('system', ($isBn ? 'মডিউল আপলোড হাব' : 'Module Upload Hub'), $body, '', $extraJs, '/system/modules/upload'));
+    }
+
+    /**
+     * Handle Module Package (.ZIP) Upload or Instant Scaffold Creation
+     */
+    public function handleUpload(Request $request): Response
+    {
+        $action = (string) $request->input('action', 'upload');
+
+        if ($action === 'scaffold') {
+            return $this->createScaffold($request);
+        }
+
+        // Process ZIP File Upload
+        $file = null;
+        if (isset($_FILES['module_zip']) && $_FILES['module_zip']['error'] !== UPLOAD_ERR_NO_FILE) {
+            $file = $_FILES['module_zip'];
+        }
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            $errCode = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+            $msg = match ($errCode) {
+                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'ফাইলের সাইজ পিএইচপির অনুমোদিত সাইজ (upload_max_filesize) অতিক্রম করেছে।',
+                UPLOAD_ERR_PARTIAL => 'ফাইলটি আংশিক আপলোড হয়েছে, সম্পূর্ণ আপলোড করা যায়নি।',
+                UPLOAD_ERR_NO_FILE => 'কোনো ফাইল নির্বাচন করা হয়নি। অনুগ্রহ করে একটি .ZIP ফাইল সিলেক্ট করুন।',
+                default => 'ফাইল আপলোডে ত্রুটি ঘটেছে (Error Code: ' . $errCode . ')।',
+            };
+            return $this->respondUploadResult($request, false, $msg);
+        }
+
+        $origName = $file['name'];
+        $tmpPath  = $file['tmp_name'];
+        $ext      = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+
+        if ($ext !== 'zip') {
+            return $this->respondUploadResult($request, false, 'অবৈধ ফাইল ফরম্যাট! শুধুমাত্র .ZIP আর্কাইভ আপলোড করা অনুমোদিত।');
+        }
+
+        if (!class_exists('ZipArchive')) {
+            return $this->respondUploadResult($request, false, 'সার্ভারে PHP ZipArchive এক্সটেনশন সক্রিয় নেই।');
+        }
+
+        $overwrite  = (bool) $request->input('overwrite', false);
+        $autoEnable = (bool) $request->input('auto_enable', true);
+
+        // Create temporary extraction directory
+        $tmpExtractDir = storage_path('framework/tmp_uploads/' . uniqid('mod_extract_', true));
+        if (!is_dir($tmpExtractDir)) {
+            @mkdir($tmpExtractDir, 0755, true);
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($tmpPath) !== true) {
+            $this->recursiveDelete($tmpExtractDir);
+            return $this->respondUploadResult($request, false, 'ZIP ফাইলটি খোলা যায়নি বা ফাইলটি ত্রুটিপূর্ণ।');
+        }
+
+        // Security Check: Path traversal inspection
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            if (!$stat) continue;
+            $entryName = $stat['name'];
+            if (str_contains($entryName, '..') || str_starts_with($entryName, '/') || str_starts_with($entryName, '\\')) {
+                $zip->close();
+                $this->recursiveDelete($tmpExtractDir);
+                return $this->respondUploadResult($request, false, 'নিরাপত্তা সতর্কতা: জিপ ফাইলের মধ্যে বিপজ্জনক পাথ ট্রাভার্সাল (..) শনাক্ত হয়েছে।');
+            }
+        }
+
+        $zip->extractTo($tmpExtractDir);
+        $zip->close();
+
+        // Locate module.json and source directory
+        $sourceDir = null;
+        if (file_exists($tmpExtractDir . DIRECTORY_SEPARATOR . 'module.json')) {
+            $sourceDir = $tmpExtractDir;
+        } else {
+            $subdirs = glob($tmpExtractDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
+            foreach ($subdirs as $sdir) {
+                if (file_exists($sdir . DIRECTORY_SEPARATOR . 'module.json')) {
+                    $sourceDir = $sdir;
+                    break;
+                }
+            }
+            if (!$sourceDir && count($subdirs) === 1) {
+                $sourceDir = $subdirs[0];
+            } elseif (!$sourceDir) {
+                $sourceDir = $tmpExtractDir;
+            }
+        }
+
+        // Read or generate module.json
+        $manifestPath = $sourceDir . DIRECTORY_SEPARATOR . 'module.json';
+        $manifestData = [];
+
+        if (file_exists($manifestPath)) {
+            $manifestData = json_decode((string) file_get_contents($manifestPath), true) ?: [];
+        }
+
+        $rawName = $manifestData['name'] ?? pathinfo($origName, PATHINFO_FILENAME);
+        $moduleName = preg_replace('/[^a-zA-Z0-9_]/', '', $rawName);
+        if (empty($moduleName)) {
+            $moduleName = 'Module' . date('YmdHis');
+        }
+
+        $slug = $manifestData['slug'] ?? strtolower(preg_replace('/[^a-z0-9_-]/', '', $moduleName));
+        $version = $manifestData['version'] ?? '1.0.0';
+        $description = $manifestData['description'] ?? 'Custom uploaded NetFusion extension.';
+
+        if (!file_exists($manifestPath)) {
+            $manifestData = [
+                'name'        => $moduleName,
+                'slug'        => $slug,
+                'version'     => $version,
+                'description' => $description,
+                'author'      => $manifestData['author'] ?? 'Uploaded Extension',
+                'enabled'     => $autoEnable,
+                'priority'    => 15,
+                'providers'   => [],
+                'updated_at'  => (new DateTimeImmutable())->format('c'),
+            ];
+            file_put_contents($manifestPath, json_encode($manifestData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        }
+
+        // Target Module Directory
+        $destDir = base_path('app/Modules/' . $moduleName);
+
+        if (is_dir($destDir)) {
+            if (!$overwrite) {
+                $this->recursiveDelete($tmpExtractDir);
+                return $this->respondUploadResult($request, false, "মডিউল '{$moduleName}' ইতিমধ্যে সিস্টেমে ইনস্টল করা আছে। আপনি যদি এটিকে আপডেট করতে চান তবে 'বিদ্যমান মডিউল ওভাররাইট করুন' চেকবক্সে টিক দিন।");
+            }
+        } else {
+            @mkdir($destDir, 0755, true);
+        }
+
+        // Copy files
+        $this->recursiveCopy($sourceDir, $destDir);
+        $this->recursiveDelete($tmpExtractDir);
+
+        // Update module state
+        $stateFile = storage_path('framework/modules_state.json');
+        $states = is_file($stateFile) ? json_decode((string) file_get_contents($stateFile), true) : [];
+        if (!is_array($states)) {
+            $states = [];
+        }
+
+        $states[$moduleName] = [
+            'enabled'    => $autoEnable,
+            'name'       => $moduleName,
+            'version'    => $version,
+            'updated_at' => (new DateTimeImmutable())->format('c'),
+        ];
+        file_put_contents($stateFile, json_encode($states, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        try {
+            app(\NetFusion\Core\Modules\ModuleLoader::class)->reset();
+        } catch (\Throwable) {}
+
+        $successMsg = "মডিউল '{$moduleName}' (v{$version}) সফলভাবে আপলোড, আনপ্যাক এবং " . ($autoEnable ? 'সক্রিয়' : 'ইনস্টল') . " করা হয়েছে!";
+        return $this->respondUploadResult($request, true, $successMsg, [
+            'module'  => $moduleName,
+            'version' => $version,
+            'path'    => 'app/Modules/' . $moduleName,
+        ]);
+    }
+
+    /**
+     * Create a new module scaffold directly via web generator
+     */
+    protected function createScaffold(Request $request): Response
+    {
+        $rawName = trim((string) $request->input('scaffold_name', ''));
+        $name    = preg_replace('/[^a-zA-Z0-9_]/', '', $rawName);
+        $slug    = strtolower(trim((string) $request->input('scaffold_slug', '')));
+        $slug    = preg_replace('/[^a-z0-9_-]/', '', $slug) ?: strtolower($name);
+        $desc    = trim((string) $request->input('scaffold_description', '')) ?: "Enterprise module for {$name}";
+        $author  = trim((string) $request->input('scaffold_author', '')) ?: 'DotNetBD Engineering';
+        $icon    = trim((string) $request->input('scaffold_icon', '')) ?: '📦';
+
+        if (empty($name)) {
+            return $this->respondUploadResult($request, false, 'মডিউলের নাম প্রদান করা আবশ্যক (PascalCase ফরম্যাটে)।');
+        }
+
+        $moduleDir = base_path('app/Modules/' . $name);
+        if (is_dir($moduleDir)) {
+            return $this->respondUploadResult($request, false, "মডিউল '{$name}' ইতিমধ্যে সিস্টেমে বিদ্যমান!");
+        }
+
+        // Create directories
+        $dirs = [
+            $moduleDir,
+            $moduleDir . '/Controllers',
+            $moduleDir . '/Models',
+            $moduleDir . '/Providers',
+            $moduleDir . '/Routes',
+            $moduleDir . '/Services',
+            $moduleDir . '/Views',
+        ];
+        foreach ($dirs as $d) {
+            if (!is_dir($d)) {
+                @mkdir($d, 0755, true);
+            }
+        }
+
+        $now = (new DateTimeImmutable())->format('c');
+
+        // 1. module.json
+        $manifest = [
+            'name'        => $name,
+            'slug'        => $slug,
+            'version'     => '1.0.0',
+            'description' => $desc,
+            'author'      => $author,
+            'enabled'     => true,
+            'priority'    => 15,
+            'icon'        => $icon,
+            'providers'   => [
+                "NetFusion\\Modules\\{$name}\\Providers\\{$name}ServiceProvider",
+            ],
+            'updated_at'  => $now,
+        ];
+        file_put_contents($moduleDir . '/module.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        // 2. config.php
+        $configContent = <<<PHP
+<?php
+
+declare(strict_types=1);
+
+return [
+    'name'        => '{$name}',
+    'slug'        => '{$slug}',
+    'enabled'     => true,
+    'version'     => '1.0.0',
+    'description' => '{$desc}',
+];
+PHP;
+        file_put_contents($moduleDir . '/config.php', $configContent);
+
+        // 3. Provider
+        $providerContent = <<<PHP
+<?php
+
+declare(strict_types=1);
+
+namespace NetFusion\Modules\\{$name}\Providers;
+
+use NetFusion\Core\Application;
+use NetFusion\Core\Modules\ModuleServiceProvider;
+
+class {$name}ServiceProvider extends ModuleServiceProvider
+{
+    public function register(Application \$app): void
+    {
+        // Bind module services into DI container
+    }
+
+    public function boot(Application \$app): void
+    {
+        \$this->loadRoutesFrom(__DIR__ . '/../Routes/web.php');
+    }
 }
+PHP;
+        file_put_contents($moduleDir . "/Providers/{$name}ServiceProvider.php", $providerContent);
+
+        // 4. Controller
+        $controllerContent = <<<PHP
+<?php
+
+declare(strict_types=1);
+
+namespace NetFusion\Modules\\{$name}\Controllers;
+
+use NetFusion\Core\Http\Request;
+use NetFusion\Core\Http\Response;
+use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
+
+class {$name}DashboardController
+{
+    public function index(Request \$request): Response
+    {
+        \$kpi1 = ModuleLayoutHelper::kpiCard('Module Status', 'Active', 'Operational and Loaded');
+        \$kpi2 = ModuleLayoutHelper::kpiCard('Module Version', 'v1.0.0', 'Initial Scaffold Release');
+        \$kpi3 = ModuleLayoutHelper::kpiCard('Architecture', 'HMVC Isolated', 'Pure PHP 8.2+ Architecture');
+
+        \$body = <<<HTML
+        <div class="kpi-grid">
+            {\$kpi1}
+            {\$kpi2}
+            {\$kpi3}
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">{$icon} {$name} Module Dashboard</span>
+            </div>
+            <div style="padding: 24px;">
+                <h3 style="font-size:16px; margin-bottom:8px; color:#1e293b;">{$name} মডিউল সফলভাবে সক্রিয় হয়েছে</h3>
+                <p style="color:#64748b; font-size:13.5px; margin-bottom:16px;">{$desc}</p>
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; font-family:monospace; font-size:12.5px; color:#334155;">
+                    <strong>Installed Directory:</strong> app/Modules/{$name}/<br>
+                    <strong>Controller:</strong> app/Modules/{$name}/Controllers/{$name}DashboardController.php<br>
+                    <strong>Route:</strong> /{$slug} (defined in app/Modules/{$name}/Routes/web.php)
+                </div>
+            </div>
+        </div>
+HTML;
+
+        return Response::html(ModuleLayoutHelper::wrap('system', '{$name} Module', \$body, '', '', '/{$slug}'));
+    }
+}
+PHP;
+        file_put_contents($moduleDir . "/Controllers/{$name}DashboardController.php", $controllerContent);
+
+        // 5. Routes
+        $routesContent = <<<PHP
+<?php
+
+declare(strict_types=1);
+
+use NetFusion\Core\Routing\Router;
+use NetFusion\Modules\\{$name}\Controllers\\{$name}DashboardController;
+
+/** @var Router \$router */
+\$router->get('/{$slug}', [{$name}DashboardController::class, 'index'])->name('{$slug}.index');
+PHP;
+        file_put_contents($moduleDir . '/Routes/web.php', $routesContent);
+
+        // 6. View
+        $viewContent = <<<HTML
+<div class="module-view">
+    <h2><?= htmlspecialchars(\$name) ?></h2>
+    <p><?= htmlspecialchars(\$description) ?></p>
+</div>
+HTML;
+        file_put_contents($moduleDir . '/Views/dashboard.php', $viewContent);
+
+        // 7. Update module states
+        $stateFile = storage_path('framework/modules_state.json');
+        $states = is_file($stateFile) ? json_decode((string) file_get_contents($stateFile), true) : [];
+        if (!is_array($states)) {
+            $states = [];
+        }
+        $states[$name] = [
+            'enabled'    => true,
+            'name'       => $name,
+            'version'    => '1.0.0',
+            'updated_at' => $now,
+        ];
+        file_put_contents($stateFile, json_encode($states, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        try {
+            app(\NetFusion\Core\Modules\ModuleLoader::class)->reset();
+        } catch (\Throwable) {}
+
+        $successMsg = "নতুন মডিউল '{$name}' (/{$slug}) সফলভাবে জেনারেট ও সক্রিয় করা হয়েছে!";
+        return $this->respondUploadResult($request, true, $successMsg, [
+            'module'  => $name,
+            'slug'    => $slug,
+            'path'    => 'app/Modules/' . $name,
+        ]);
+    }
+
+    /**
+     * Generate and download a runnable Sample Module Boilerplate (.ZIP)
+     */
+    public function downloadSample(Request $request): Response
+    {
+        if (!class_exists('ZipArchive')) {
+            return Response::html('<h1>ZipArchive extension not available</h1>', 500);
+        }
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'nff_sample_') . '.zip';
+        $zip = new ZipArchive();
+        if ($zip->open($tempFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            return Response::html('<h1>Unable to create ZIP archive</h1>', 500);
+        }
+
+        // Add boilerplate files to ZIP
+        $manifest = [
+            'name'        => 'SampleExtension',
+            'slug'        => 'sample-extension',
+            'version'     => '1.0.0',
+            'description' => 'Official Sample Starter Extension for NetFusion Framework',
+            'author'      => 'DotNetBD Engineering',
+            'enabled'     => true,
+            'priority'    => 15,
+            'icon'        => '🚀',
+            'providers'   => [
+                'NetFusion\\Modules\\SampleExtension\\Providers\\SampleExtensionServiceProvider',
+            ],
+            'updated_at'  => (new DateTimeImmutable())->format('c'),
+        ];
+        $zip->addFromString('SampleExtension/module.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        $config = "<?php\ndeclare(strict_types=1);\n\nreturn [\n    'name' => 'SampleExtension',\n    'slug' => 'sample-extension',\n    'enabled' => true,\n    'version' => '1.0.0',\n];\n";
+        $zip->addFromString('SampleExtension/config.php', $config);
+
+        $provider = "<?php\ndeclare(strict_types=1);\n\nnamespace NetFusion\\Modules\\SampleExtension\\Providers;\n\nuse NetFusion\\Core\\Application;\nuse NetFusion\\Core\\Modules\\ModuleServiceProvider;\n\nclass SampleExtensionServiceProvider extends ModuleServiceProvider\n{\n    public function register(Application \$app): void {}\n    public function boot(Application \$app): void\n    {\n        \$this->loadRoutesFrom(__DIR__ . '/../Routes/web.php');\n    }\n}\n";
+        $zip->addFromString('SampleExtension/Providers/SampleExtensionServiceProvider.php', $provider);
+
+        $controller = <<<'CONTROLLER'
+<?php
+
+declare(strict_types=1);
+
+namespace NetFusion\Modules\SampleExtension\Controllers;
+
+use NetFusion\Core\Http\Request;
+use NetFusion\Core\Http\Response;
+use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
+
+class SampleExtensionDashboardController
+{
+    public function index(Request $request): Response
+    {
+        $kpi1 = ModuleLayoutHelper::kpiCard('Extension Status', 'Operational', 'Sample Boilerplate Active');
+        $kpi2 = ModuleLayoutHelper::kpiCard('Installed Version', 'v1.0.0', 'Certified NetFusion Extension');
+        $kpi3 = ModuleLayoutHelper::kpiCard('HMVC Isolation', 'Active', 'Modular Architecture');
+
+        $body = <<<HTML
+        <div class="kpi-grid">
+            {$kpi1}
+            {$kpi2}
+            {$kpi3}
+        </div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">🚀 SampleExtension Dashboard</span></div>
+            <div style="padding:22px;">
+                <p style="color:#475569; margin-bottom:12px;">This is a demonstration module uploaded and running inside NetFusion Framework.</p>
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; padding:14px; border-radius:6px; font-family:monospace; font-size:13px;">
+                    Location: app/Modules/SampleExtension/<br>
+                    Routes: app/Modules/SampleExtension/Routes/web.php (/sample-extension)<br>
+                    Controller: app/Modules/SampleExtension/Controllers/SampleExtensionDashboardController.php
+                </div>
+            </div>
+        </div>
+HTML;
+
+        return Response::html(ModuleLayoutHelper::wrap('system', 'SampleExtension', $body, '', '', '/sample-extension'));
+    }
+}
+CONTROLLER;
+        $zip->addFromString('SampleExtension/Controllers/SampleExtensionDashboardController.php', $controller);
+
+        $routes = "<?php\ndeclare(strict_types=1);\n\nuse NetFusion\\Core\\Routing\\Router;\nuse NetFusion\\Modules\\SampleExtension\\Controllers\\SampleExtensionDashboardController;\n\n/** @var Router \$router */\n\$router->get('/sample-extension', [SampleExtensionDashboardController::class, 'index'])->name('sample-extension.index');\n";
+        $zip->addFromString('SampleExtension/Routes/web.php', $routes);
+
+        $views = "<div><h2>Sample Extension View</h2></div>\n";
+        $zip->addFromString('SampleExtension/Views/dashboard.php', $views);
+
+        $zip->close();
+
+        $binary = (string) file_get_contents($tempFile);
+        @unlink($tempFile);
+
+        return new Response($binary, 200, [
+            'Content-Type'        => 'application/zip',
+            'Content-Disposition' => 'attachment; filename="NetFusion-SampleExtension.zip"',
+            'Content-Length'      => (string) strlen($binary),
+            'Cache-Control'       => 'no-cache, must-revalidate',
+        ]);
+    }
+
+    /**
+     * Respond with either JSON (for AJAX) or HTTP redirect with query parameters
+     */
+    protected function respondUploadResult(Request $request, bool $success, string $message, array $extra = []): Response
+    {
+        if ($request->wantsJson() || ($request->header('X-Requested-With') === 'XMLHttpRequest')) {
+            return Response::json(array_merge([
+                'success' => $success,
+                'message' => $message,
+            ], $extra), $success ? 200 : 400);
+        }
+
+        $status = $success ? 'success' : 'error';
+        $redirectUrl = '/system/modules/upload?status=' . $status . '&msg=' . urlencode($message);
+        return Response::redirect($redirectUrl);
+    }
+
+    /**
+     * Recursively copy a directory to destination
+     */
+    protected function recursiveCopy(string $src, string $dst): void
+    {
+        $dir = opendir($src);
+        if ($dir === false) return;
+        @mkdir($dst, 0755, true);
+
+        while (($file = readdir($dir)) !== false) {
+            if ($file === '.' || $file === '..') continue;
+            $srcPath = $src . DIRECTORY_SEPARATOR . $file;
+            $dstPath = $dst . DIRECTORY_SEPARATOR . $file;
+            if (is_dir($srcPath)) {
+                $this->recursiveCopy($srcPath, $dstPath);
+            } else {
+                copy($srcPath, $dstPath);
+            }
+        }
+        closedir($dir);
+    }
+
+    /**
+     * Recursively remove a directory and its contents
+     */
+    protected function recursiveDelete(string $dir): void
+    {
+        if (!is_dir($dir)) return;
+        $files = array_diff(scandir($dir) ?: [], ['.', '..']);
+        foreach ($files as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            if (is_dir($path)) {
+                $this->recursiveDelete($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+}
+

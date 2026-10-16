@@ -158,6 +158,12 @@ $router->get('/install/completed', [\NetFusion\App\Http\Controllers\InstallContr
 
 $router->group(['prefix' => 'admin', 'name' => 'admin.'], function (Router $r) {
     $r->get('/dashboard', [\NetFusion\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+    $r->get('/modules', function () {
+        return \NetFusion\Core\Http\Response::redirect('/system/modules');
+    });
+    $r->get('/modules/upload', function () {
+        return \NetFusion\Core\Http\Response::redirect('/system/modules/upload');
+    });
     $r->post('/modules/toggle', [\NetFusion\App\Http\Controllers\DashboardController::class, 'toggleModule'])->name('modules.toggle');
     $r->post('/tenants/switch', [\NetFusion\App\Http\Controllers\DashboardController::class, 'switchTenant'])->name('tenants.switch');
     $r->post('/tenants/create', [\NetFusion\App\Http\Controllers\DashboardController::class, 'createTenant'])->name('tenants.create');
