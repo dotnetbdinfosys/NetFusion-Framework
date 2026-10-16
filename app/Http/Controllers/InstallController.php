@@ -486,7 +486,7 @@ ENV;
 
             <div class="section-title" style="margin-top:30px">5. DotNetBD Enterprise License Activation (Optional)</div>
             <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:6px; padding:12px; margin-bottom:16px; font-size:13px; color:#bfdbfe;">
-                ℹ Enter your 20-character DotNetBD License Key and registered Company Name to activate immediately. If you don't have one, leave blank and activate anytime via <code>/license</code>.
+                ℹ Enter your 20-character DotNetBD License Key and registered Company Name to activate immediately. If you don't have one, leave blank to continue.
             </div>
             <div class="form-grid">
                 <div class="form-group">
@@ -601,8 +601,7 @@ HTML;
         <h1>Installation Completed!</h1>
         <p>Congratulations! <strong>NetFusion Framework</strong> has been successfully installed, configured, and secured. The installation lock has been created at <code>storage/installed</code>.</p>
         <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-            <a href="/license" class="btn" style="background: #10b981;">🛡️ Activate License (GUI)</a>
-            <a href="/admin/dashboard" class="btn">Go to Executive Dashboard</a>
+            <a href="/admin/dashboard" class="btn" style="background: #2563eb;">🚀 Go to Executive Dashboard</a>
         </div>
         <div class="notice">
             NetFusion Framework &bull; Author: Md. Atiquzzaman Ashish &bull; DotNetBD

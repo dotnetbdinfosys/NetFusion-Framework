@@ -117,14 +117,7 @@ $router->get('/admin', function () {
 //  Health Check
 // ============================================================
 
-$router->get('/health', function () {
-    return Response::json([
-        'status'  => 'healthy',
-        'uptime'  => app()->elapsedTime() . ' ms',
-        'memory'  => app()->peakMemory() . ' MB',
-        'time'    => now()->format('Y-m-d H:i:s T'),
-    ]);
-})->name('health');
+$router->get('/health', [\NetFusion\App\Http\Controllers\HealthController::class, 'index'])->name('health');
 
 // ============================================================
 //  About NetFusion

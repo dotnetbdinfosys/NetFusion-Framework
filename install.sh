@@ -325,8 +325,7 @@ else
     
     if [ "$IS_LICENSED" = false ]; then
         echo -e "${COLOR_YELLOW}ℹ You can activate your license at any time:${COLOR_RESET}"
-        echo -e "  1. CLI Command:  ${COLOR_CYAN}php netfusion license:activate <LICENSE_KEY> <COMPANY_NAME>${COLOR_RESET}"
-        echo -e "  2. Web GUI:      ${COLOR_CYAN}Visit http://your-domain.com/license${COLOR_RESET}"
+        echo -e "  • CLI Command:   ${COLOR_CYAN}php netfusion license:activate <LICENSE_KEY> <COMPANY_NAME>${COLOR_RESET}"
     fi
 fi
 
@@ -350,7 +349,7 @@ echo -e "${COLOR_BOLD}Web Server DocumentRoot:${COLOR_RESET} ${COLOR_CYAN}${INST
 echo ""
 echo -e "${COLOR_BOLD}Quick Start Options:${COLOR_RESET}"
 echo -e "  • Start Local Server:     ${COLOR_CYAN}php netfusion serve${COLOR_RESET} (or ${COLOR_CYAN}php -S 0.0.0.0:8000 -t public${COLOR_RESET})"
-echo -e "  • Web License Portal:     ${COLOR_CYAN}http://localhost:8000/license${COLOR_RESET}"
+echo -e "  • System Health Monitor:  ${COLOR_CYAN}http://localhost:8000/health${COLOR_RESET}"
 echo -e "  • Admin Dashboard:        ${COLOR_CYAN}http://localhost:8000/admin/dashboard${COLOR_RESET}"
 echo -e "  • System Diagnostics:     ${COLOR_CYAN}php netfusion framework:verify${COLOR_RESET}"
 echo ""

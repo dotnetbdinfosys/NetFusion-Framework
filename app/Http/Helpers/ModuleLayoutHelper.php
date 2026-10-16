@@ -496,7 +496,7 @@ class ModuleLayoutHelper
             <div><strong>NetFusion {$modName} Module</strong> &bull; Version {$version} (Fixed) &bull; &copy; 2026 <strong>DotNetBD</strong></div>
             <div class="footer-links">
                 <a href="/admin/dashboard">ড্যাশবোর্ড</a>
-                <a href="/license">লাইসেন্স</a>
+                <a href="/health">সিস্টেম হেলথ</a>
                 <a href="https://www.dotnetbd.com" target="_blank">DotNetBD</a>
             </div>
         </footer>

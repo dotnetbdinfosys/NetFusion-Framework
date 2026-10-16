@@ -70,7 +70,6 @@ if (file_exists($lockFile)) {
             <p>The framework has already been successfully installed and secured on this server. To protect your data, the web installer is locked.<br><br>If you need to re-run the setup wizard, remove the lock file at <code>storage/installed</code>.</p>
             <div class="btn-group">
                 <a href="/" class="btn btn-secondary">🌐 Visit Homepage</a>
-                <a href="/license" class="btn btn-secondary">🛡️ License Portal</a>
                 <a href="/admin/dashboard" class="btn btn-primary">⚡ Admin Dashboard</a>
             </div>
             <div class="footer">
@@ -254,7 +253,7 @@ ENV;
 
             // F. DotNetBD License CMS Activation (if provided)
             $licenseActivated = false;
-            $licenseMsg = 'License activation skipped. You can activate anytime from /license.';
+            $licenseMsg = 'License activation skipped.';
             if (!empty($licenseKey) && !empty($companyName)) {
                 $autoloadFile = $baseDir . '/vendor/autoload.php';
                 if (file_exists($autoloadFile)) {
@@ -354,7 +353,6 @@ if (isset($_GET['step']) && $_GET['step'] === 'completed') {
 
             <div class="btn-group">
                 <a href="/" class="btn btn-secondary">🌐 Visit Site</a>
-                <a href="/license" class="btn btn-success">🛡️ License Portal</a>
                 <a href="/admin/dashboard" class="btn btn-primary">⚡ Admin Dashboard</a>
             </div>
 
@@ -593,7 +591,7 @@ header('Content-Type: text/html; charset=UTF-8');
 
                 <div class="section-title">৫. DotNetBD Enterprise লাইসেন্স কি অ্যাক্টিভেশন (License Activation)</div>
                 <div class="notice license-box">
-                    ℹ আপনার কেনা ২০-সংখ্যার লাইসেন্স কি এবং নিবন্ধিত কোম্পানির নাম দিন। যদি এই মুহূর্তে লাইসেন্স কি না থাকে, তবে খালি রেখে এগিয়ে যেতে পারবেন এবং পরবর্তীতে <code>/license</code> পেজ থেকে এক্টিভ করতে পারবেন।
+                    ℹ আপনার কেনা ২০-সংখ্যার লাইসেন্স কি এবং নিবন্ধিত কোম্পানির নাম দিন। যদি এই মুহূর্তে লাইসেন্স কি না থাকে, তবে খালি রেখে এগিয়ে যেতে পারবেন।
                 </div>
                 <div class="form-grid">
                     <div class="form-group">

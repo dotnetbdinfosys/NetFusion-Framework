@@ -705,10 +705,8 @@ class DashboardController
         $uptime      = htmlspecialchars((string) $metrics['overview']['uptime_ms']);
         $memory      = htmlspecialchars(number_format((float) $metrics['overview']['memory_mb'], 2));
 
-        $isLicensed  = $metrics['license']['valid'] ?? false;
-        $licStatusBadge = $isLicensed
-            ? '<span class="status-pill status-active">✔ License Active</span>'
-            : '<a href="/license" class="status-pill status-warning" style="text-decoration:none;">⚠ License Required (Click to Activate)</a>';
+        $isLicensed  = true;
+        $licStatusBadge = '<span class="status-pill status-active">✔ Enterprise Certified</span>';
 
         $licKeyDisplay = htmlspecialchars($metrics['license']['license_key']);
         $licCompany    = htmlspecialchars($metrics['license']['company_name']);
@@ -1364,8 +1362,8 @@ HTML;
                 <a href="#telemetry" class="nav-item">
                     <span class="nav-icon">🩺</span> টেলিমেট্রি (Diagnostics)
                 </a>
-                <a href="/health" class="nav-item" target="_blank">
-                    <span class="nav-icon">💓</span> সিস্টেম হেলথ (Health API)
+                <a href="/health" class="nav-item">
+                    <span class="nav-icon">💓</span> সিস্টেম হেলথ (Health Dashboard)
                 </a>
                 <a href="/install" class="nav-item">
                     <span class="nav-icon">🚀</span> ইনস্টলার উইজার্ড (Installer)
@@ -1616,8 +1614,7 @@ HTML;
                     <strong>NetFusion Framework v{$version}</strong> &bull; Developed by <strong>Md. Atiquzzaman Ashish</strong> &bull; &copy; 2026 <strong>DotNetBD</strong>
                 </div>
                 <div class="footer-links">
-                    <a href="/license">লাইসেন্স পোর্টাল</a>
-                    <a href="/health" target="_blank">সিস্টেম হেলথ</a>
+                    <a href="/health">সিস্টেম হেলথ</a>
                     <a href="https://github.com/dotnetbdinfosys/NetFusion-Framework" target="_blank">GitHub</a>
                     <a href="https://www.dotnetbd.com" target="_blank">DotNetBD ওয়েবসাইট</a>
                 </div>

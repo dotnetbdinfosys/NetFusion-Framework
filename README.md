@@ -48,9 +48,6 @@ NetFusion Framework includes native DotNetBD Enterprise License CMS (v5.1.8) val
 php netfusion license:activate <LICENSE_KEY> "<COMPANY_NAME>"
 ```
 
-### 2. Web GUI Portal:
-Visit `http://your-domain.com/license` in your web browser, enter your **License Key** and **Company Name**, and click **Activate License Now**.
-
 ---
 
 ## 📋 System Requirements
