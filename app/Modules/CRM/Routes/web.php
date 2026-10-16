@@ -10,14 +10,12 @@ declare(strict_types=1);
 | File      : app/Modules/CRM/Routes/web.php
 | Module    : CRM
 | Namespace : None (Route Definitions)
-| Purpose   : Web routes for CRM pipeline and Helpdesk overview.
+| Purpose   : Web routes for Customer Relationship Management (CRM) module.
 |
 | Author    : Md. Atiquzzaman Ashish
 | Company   : DotNetBD
-| Website   : www.dotnetbd.com
-| Copyright : © DotNetBD. All rights reserved.
 | License   : MIT
-| Version   : 1.0.0
+| Version   : 1.3.1
 |
 |--------------------------------------------------------------------------
 */
@@ -27,4 +25,10 @@ use NetFusion\Modules\CRM\Controllers\CrmDashboardController;
 
 /** @var Router $router */
 
-$router->get('/crm', [CrmDashboardController::class, 'index']);
+$router->get('/crm', [CrmDashboardController::class, 'index'])->name('crm.dashboard');
+$router->get('/crm/leads', [CrmDashboardController::class, 'leads'])->name('crm.leads');
+$router->get('/crm/deals', [CrmDashboardController::class, 'deals'])->name('crm.deals');
+$router->get('/crm/companies', [CrmDashboardController::class, 'companies'])->name('crm.companies');
+$router->get('/crm/contacts', [CrmDashboardController::class, 'contacts'])->name('crm.contacts');
+$router->get('/crm/tickets', [CrmDashboardController::class, 'tickets'])->name('crm.tickets');
+$router->get('/crm/analytics', [CrmDashboardController::class, 'analytics'])->name('crm.analytics');

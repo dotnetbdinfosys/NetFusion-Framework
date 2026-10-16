@@ -4,20 +4,18 @@ declare(strict_types=1);
 
 /*
 |--------------------------------------------------------------------------
-| NetFusion  Framework
+| NetFusion Framework
 |--------------------------------------------------------------------------
 |
 | File      : app/Modules/Billing/Routes/web.php
-| Module    : Modules\Billing
-| Namespace : None (Module Web Routes)
-| Purpose   : Web routing definitions for Billing Module dashboard and overview.
+| Module    : Billing
+| Namespace : None (Route Definitions)
+| Purpose   : Web routes for SaaS Billing and Subscription Management module.
 |
 | Author    : Md. Atiquzzaman Ashish
 | Company   : DotNetBD
-| Website   : www.dotnetbd.com
-| Copyright : © DotNetBD. All rights reserved.
 | License   : MIT
-| Version   : 1.0.0
+| Version   : 1.3.1
 |
 |--------------------------------------------------------------------------
 */
@@ -26,4 +24,10 @@ use NetFusion\Core\Routing\Router;
 use NetFusion\Modules\Billing\Controllers\BillingController;
 
 /** @var Router $router */
-$router->get('/billing', [BillingController::class, 'index'])->name('billing.index');
+
+$router->get('/billing', [BillingController::class, 'index'])->name('billing.dashboard');
+$router->get('/billing/invoices', [BillingController::class, 'invoices'])->name('billing.invoices');
+$router->get('/billing/subscriptions', [BillingController::class, 'subscriptions'])->name('billing.subscriptions');
+$router->get('/billing/plans', [BillingController::class, 'plans'])->name('billing.plans');
+$router->get('/billing/payments', [BillingController::class, 'payments'])->name('billing.payments');
+$router->get('/billing/overdue', [BillingController::class, 'overdue'])->name('billing.overdue');

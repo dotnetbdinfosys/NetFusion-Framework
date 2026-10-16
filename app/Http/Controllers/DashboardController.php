@@ -1340,6 +1340,29 @@ HTML;
                     <span class="nav-icon">🛡️</span> লাইসেন্স পোর্টাল (License CMS)
                 </a>
 
+                <div class="menu-label">বিজনেস মডিউলস (HMVC)</div>
+                <a href="/accounting" class="nav-item">
+                    <span class="nav-icon">📊</span> অ্যাকাউন্টিং (Accounting)
+                </a>
+                <a href="/billing" class="nav-item">
+                    <span class="nav-icon">💳</span> বিলিং ও সাবস্ক্রিপশন (Billing)
+                </a>
+                <a href="/crm" class="nav-item">
+                    <span class="nav-icon">👥</span> সিআরএম ও লিডস (CRM)
+                </a>
+                <a href="/commerce" class="nav-item">
+                    <span class="nav-icon">🛍️</span> কমার্স ও পিওএস (Commerce)
+                </a>
+                <a href="/hrm" class="nav-item">
+                    <span class="nav-icon">👔</span> এইচআরএম ও পেরোল (HRM)
+                </a>
+                <a href="/inventory" class="nav-item">
+                    <span class="nav-icon">📦</span> ইনভেন্টরি ও গুদাম (Inventory)
+                </a>
+                <a href="/system/status" class="nav-item">
+                    <span class="nav-icon">⚙️</span> সিস্টেম মনিটর (System)
+                </a>
+
                 <div class="menu-label">সিস্টেম কনট্রোল (Engine)</div>
                 <a href="#telemetry" class="nav-item">
                     <span class="nav-icon">🩺</span> টেলিমেট্রি (Diagnostics)

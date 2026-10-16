@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
 |--------------------------------------------------------------------------
-| NetFusion  Framework
+| NetFusion Framework
 |--------------------------------------------------------------------------
 |
 | File      : app/Modules/Accounting/Routes/web.php
@@ -14,10 +14,8 @@ declare(strict_types=1);
 |
 | Author    : Md. Atiquzzaman Ashish
 | Company   : DotNetBD
-| Website   : www.dotnetbd.com
-| Copyright : © DotNetBD. All rights reserved.
 | License   : MIT
-| Version   : 1.0.0
+| Version   : 1.3.1
 |
 |--------------------------------------------------------------------------
 */
@@ -27,4 +25,11 @@ use NetFusion\Modules\Accounting\Controllers\AccountingDashboardController;
 
 /** @var Router $router */
 
-$router->get('/accounting', [AccountingDashboardController::class, 'index']);
+$router->get('/accounting', [AccountingDashboardController::class, 'index'])->name('accounting.dashboard');
+$router->get('/accounting/chart-of-accounts', [AccountingDashboardController::class, 'chartOfAccounts'])->name('accounting.chart');
+$router->get('/accounting/journal', [AccountingDashboardController::class, 'journal'])->name('accounting.journal');
+$router->get('/accounting/ledger', [AccountingDashboardController::class, 'ledger'])->name('accounting.ledger');
+$router->get('/accounting/trial-balance', [AccountingDashboardController::class, 'trialBalance'])->name('accounting.trial-balance');
+$router->get('/accounting/income-statement', [AccountingDashboardController::class, 'incomeStatement'])->name('accounting.income-statement');
+$router->get('/accounting/balance-sheet', [AccountingDashboardController::class, 'balanceSheet'])->name('accounting.balance-sheet');
+$router->get('/accounting/tax-report', [AccountingDashboardController::class, 'taxReport'])->name('accounting.tax-report');
