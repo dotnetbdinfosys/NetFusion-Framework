@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.3] - 2026-10-16
+
+### Added
+- **Default English & Secondary Bengali Localization Fabric:**
+  - Configured English (`en`) as the default system-wide language and Bengali (`bn`) as secondary.
+  - Interactive top-header language switcher (`🌐 EN | বাং`) with live cookie persistence (`app_locale`) and automatic fallback resolution.
+  - Bilingual interface support across all 6 HMVC business modules (Accounting, Billing, CRM, Commerce, HRM, Inventory) and System telemetry pages.
+- **Enterprise Header, Footer, Logo & Favicon Customizer (`SiteSettingsHelper`):**
+  - Persistent branding settings engine backed by `storage/framework/site_settings.json`.
+  - Customizer modal dialog (`[⚙️ Site Settings]`) directly accessible from the executive dashboard header.
+  - Real-time custom branding controls for:
+    - Application Site Title & Tagline.
+    - Global Top Header Announcement Banner.
+    - Dynamic Brand Logo: Emoji/glyph icon or custom image URL.
+    - Browser Tab Favicon: Custom favicon URL injection.
+    - Global Footer Copyright statement, Company Name, and Website URL.
+- **Multi-Tenant Site Details Customization & Editor:**
+  - Extended Multi-Tenant data schema with `site_title` and `description` attributes across all tenant workspaces.
+  - Interactive Tenant Editor modal (`[✏️ Edit]`) in the Multi-Tenant Architecture table.
+  - Live synchronization of tenant organization name, site title, description, custom domain, isolation driver (Database, Column-Scoped, Schema-Scoped), and account status (Active, Suspended, Provisioning).
+- **Executive System Health Telemetry Dashboard (`/health`):**
+  - High-visibility diagnostic telemetry suite monitoring CPU load, real-time memory usage, disk allocation, PHP 8.2+ runtime environment, database connectivity, and security configuration score.
+  - Promoted directly to primary navigation menus across all module layouts and main admin dashboard.
+
+### Changed
+- Promoted framework release version from `1.3.5` to `1.5.3` across all core containers, release manifests, configuration files, and installer templates.
+- **Strict Versioning Display Rules:**
+  - Completely sanitized version formatting to strictly display clean `v1.5.3` without redundant suffix tags.
+  - Restricted version visibility strictly to page footers and dedicated system inspection pages (`/system`, `/system/status`, `/system/modules`, `/health`), eliminating version strings from top headers, sidebar headers, and KPI telemetry cards.
+
+### Removed
+- **License Portal Deprecation:**
+  - Completely eradicated and unlinked all legacy License Portal (`/license`) references from dashboard sidebars, module navigation trees, and footer links in favor of native system health introspection.
+
+---
+
 ## [1.3.5] - 2026-10-16
 
 ### Added

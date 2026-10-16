@@ -17,7 +17,7 @@ declare(strict_types=1);
 | Website   : www.dotnetbd.com
 | Copyright : © DotNetBD. All rights reserved.
 | License   : MIT
-| Version   : 1.3.5
+| Version   : 1.5.3
 |
 |--------------------------------------------------------------------------
 */
@@ -254,7 +254,7 @@ ENV;
             $lockContent = json_encode([
                 'installed_at'  => (new DateTimeImmutable())->format('c'),
                 'framework'     => 'NetFusion Framework',
-                'version'       => '1.3.5',
+                'version'       => '1.5.3',
                 'app_name'      => $appName,
                 'app_url'       => $appUrl,
                 'admin_email'   => $adminEmail,

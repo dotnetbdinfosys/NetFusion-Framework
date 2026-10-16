@@ -15,7 +15,7 @@ declare(strict_types=1);
 | Author    : Md. Atiquzzaman Ashish
 | Company   : DotNetBD
 | License   : MIT
-| Version   : 1.3.5
+| Version   : 1.5.3
 |
 |--------------------------------------------------------------------------
 */
@@ -501,7 +501,7 @@ class ModuleLayoutHelper
             {$bodyHtml}
         </main>
 
-        <!-- FOOTER: Version strictly displayed here as v1.3.5 -->
+        <!-- FOOTER: Version strictly displayed here as v1.5.3 -->
         <footer class="app-footer">
             <div>
                 <strong>{$siteName}</strong> &bull; v{$version} &bull; {$settings['footer_copyright']}

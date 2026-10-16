@@ -19,7 +19,7 @@ declare(strict_types=1);
 | Website   : https://www.dotnetbd.com
 | Copyright : © DotNetBD. All rights reserved.
 | License   : MIT
-| Version   : 1.3.5
+| Version   : 1.5.3
 |
 |--------------------------------------------------------------------------
 */
@@ -1830,7 +1830,7 @@ HTML;
                             <tr>
                                 <td><strong>Framework Release</strong></td>
                                 <td>NetFusion v{$version}</td>
-                                <td>v1.3.5</td>
+                                <td>v{$version}</td>
                                 <td style="text-align:right"><span class="badge badge-success">✔ PASS</span></td>
                             </tr>
                             <tr>
