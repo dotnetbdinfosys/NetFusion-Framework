@@ -1336,9 +1336,6 @@ HTML;
                 <a href="#users" class="nav-item">
                     <span class="nav-icon">👥</span> ইউজার ও রোল (RBAC Matrix)
                 </a>
-                <a href="/license" class="nav-item">
-                    <span class="nav-icon">🛡️</span> লাইসেন্স পোর্টাল (License CMS)
-                </a>
 
                 <div class="menu-label">বিজনেস মডিউলস (HMVC)</div>
                 <a href="/accounting" class="nav-item">
