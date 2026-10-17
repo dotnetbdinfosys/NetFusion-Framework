@@ -252,6 +252,7 @@ class CommerceDashboardController
                         <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#d97706; border-color:#fde68a;" onclick=\'openEditOrderModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
                         <a href="/commerce/orders/edit?id=' . urlencode($code) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
                         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="window.print()">চালান</button>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'commerce_orders\', \'' . $code . '\', \'/commerce/orders/delete\', \'' . htmlspecialchars($customer, ENT_QUOTES) . ' (' . $code . ')\')">🗑️ মুছুন</button>
                     </div>
                 </td>
             </tr>';
@@ -871,5 +872,27 @@ class CommerceDashboardController
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('commerce', 'সেলস রিপোর্ট', $body, '', '', '/commerce/reports'));
+    }
+
+    /**
+     * Delete an order and log audit footprint to MySQL
+     */
+    public function deleteOrder(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'অর্ডার কোড প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $ord = ModuleDataRepository::find('commerce_orders', 'id', $id);
+        if (!$ord) {
+            return Response::json(['success' => false, 'message' => 'অর্ডারটি পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('commerce_orders', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "অর্ডার #{$id} সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'অর্ডার মুছতে ব্যর্থ হয়েছে।'], 500);
     }
 }

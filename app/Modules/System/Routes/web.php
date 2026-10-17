@@ -31,4 +31,6 @@ $router->get('/system/modules', [SystemController::class, 'modules'])->name('sys
 $router->get('/system/modules/upload', [SystemController::class, 'uploadForm'])->name('system.modules.upload');
 $router->post('/system/modules/upload', [SystemController::class, 'handleUpload'])->name('system.modules.upload.post');
 $router->get('/system/modules/download-sample', [SystemController::class, 'downloadSample'])->name('system.modules.sample');
+$router->get('/system/audit/deleted', [SystemController::class, 'auditDeleted'])->name('system.audit.deleted');
+$router->post('/system/audit/restore', [SystemController::class, 'restoreDeleted'])->name('system.audit.restore');
 

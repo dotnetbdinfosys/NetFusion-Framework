@@ -30,6 +30,7 @@ $router->get('/commerce/orders', [CommerceDashboardController::class, 'orders'])
 $router->get('/commerce/orders/edit', [CommerceDashboardController::class, 'editOrder'])->name('commerce.orders.edit');
 $router->post('/commerce/orders/edit', [CommerceDashboardController::class, 'updateOrder']);
 $router->post('/commerce/orders/update', [CommerceDashboardController::class, 'updateOrder'])->name('commerce.orders.update');
+$router->post('/commerce/orders/delete', [CommerceDashboardController::class, 'deleteOrder'])->name('commerce.orders.delete');
 
 $router->get('/commerce/products', [CommerceDashboardController::class, 'products'])->name('commerce.products');
 $router->get('/commerce/products/edit', [CommerceDashboardController::class, 'editProduct'])->name('commerce.products.edit');

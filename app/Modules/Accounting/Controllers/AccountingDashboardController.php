@@ -381,6 +381,7 @@ class AccountingDashboardController
                     <div style="display:flex; gap:6px; align-items:center;">
                         <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#1e40af; border-color:#bfdbfe;" onclick=\'openEditJournalModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
                         <a href="/accounting/journal/edit?id=' . urlencode($vNo) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'accounting_journal\', \'' . $vNo . '\', \'/accounting/journal/delete\', \'' . htmlspecialchars($vNo, ENT_QUOTES) . '\')">🗑️ মুছুন</button>
                     </div>
                 </td>
             </tr>';
@@ -900,5 +901,27 @@ class AccountingDashboardController
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('accounting', 'ভ্যাট / ট্যাক্স রিপোর্ট', $body, '', '', '/accounting/tax-report'));
+    }
+
+    /**
+     * Delete a journal entry and log audit footprint to MySQL
+     */
+    public function deleteJournalEntry(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'ভাউচার নম্বর প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $entry = ModuleDataRepository::find('accounting_journal', 'id', $id);
+        if (!$entry) {
+            return Response::json(['success' => false, 'message' => 'জার্নাল ভাউচার পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('accounting_journal', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "জার্নাল ভাউচার #{$id} সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'ভাউচার মুছতে ব্যর্থ হয়েছে।'], 500);
     }
 }

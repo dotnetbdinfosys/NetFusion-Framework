@@ -240,6 +240,7 @@ class InventoryDashboardController
                     <div style="display:flex; gap:6px; align-items:center;">
                         <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#0891b2; border-color:#cffafe;" onclick=\'openEditProductModal(' . $jsonAttr . ')\'>✏️ এডিট আইটেম</button>
                         <a href="/inventory/products/edit?id=' . urlencode($sku) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'inventory_products\', \'' . $sku . '\', \'/inventory/products/delete\', \'' . htmlspecialchars($name, ENT_QUOTES) . ' (' . $sku . ')\')">🗑️ মুছুন</button>
                     </div>
                 </td>
             </tr>';
@@ -564,14 +565,17 @@ class InventoryDashboardController
             $jsonAttr = htmlspecialchars(json_encode($wh, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 
             $rowsHtml .= '
-            <tr>
+            <tr id="row-' . $code . '">
                 <td><code>' . $code . '</code></td>
                 <td><strong>' . $name . '</strong></td>
                 <td>' . $location . '</td>
                 <td>' . $incharge . '</td>
                 <td>' . ModuleLayoutHelper::badge($capacity, 'info') . '</td>
                 <td>
-                    <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#0891b2;" onclick=\'openEditWhModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#0891b2;" onclick=\'openEditWhModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'inventory_warehouses\', \'' . $code . '\', \'/inventory/warehouses/delete\', \'' . htmlspecialchars($name, ENT_QUOTES) . ' (' . $code . ')\')">🗑️ মুছুন</button>
+                    </div>
                 </td>
             </tr>';
         }
@@ -946,5 +950,49 @@ class InventoryDashboardController
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('inventory', 'স্টক ভ্যালুয়েশন', $body, '', '', '/inventory/valuation'));
+    }
+
+    /**
+     * Delete an inventory product and log audit footprint to MySQL
+     */
+    public function deleteProduct(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'পণ্য SKU বা আইডি প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $prod = ModuleDataRepository::find('inventory_products', 'id', $id);
+        if (!$prod) {
+            return Response::json(['success' => false, 'message' => 'পণ্যটি পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('inventory_products', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "পণ্য {$prod['name']} ({$id}) সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'পণ্য মুছতে ব্যর্থ হয়েছে।'], 500);
+    }
+
+    /**
+     * Delete a warehouse and log audit footprint to MySQL
+     */
+    public function deleteWarehouse(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'ওয়্যারহাউস কোড প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $wh = ModuleDataRepository::find('inventory_warehouses', 'id', $id);
+        if (!$wh) {
+            return Response::json(['success' => false, 'message' => 'ওয়্যারহাউসটি পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('inventory_warehouses', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "ওয়্যারহাউস {$wh['name']} ({$id}) সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'ওয়্যারহাউস মুছতে ব্যর্থ হয়েছে।'], 500);
     }
 }

@@ -9,6 +9,7 @@
 /storage/framework/cache/*
 /storage/framework/views/*
 /storage/framework/sessions/*
+/storage/framework/archived_json_backup/*
 /storage/*.sqlite
 /storage/*.db
 

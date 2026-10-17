@@ -30,10 +30,12 @@ $router->get('/inventory/products', [InventoryDashboardController::class, 'produ
 $router->get('/inventory/products/edit', [InventoryDashboardController::class, 'editProduct'])->name('inventory.products.edit');
 $router->post('/inventory/products/edit', [InventoryDashboardController::class, 'updateProduct']);
 $router->post('/inventory/products/update', [InventoryDashboardController::class, 'updateProduct'])->name('inventory.products.update');
+$router->post('/inventory/products/delete', [InventoryDashboardController::class, 'deleteProduct'])->name('inventory.products.delete');
 
 $router->get('/inventory/warehouses', [InventoryDashboardController::class, 'warehouses'])->name('inventory.warehouses');
 $router->get('/inventory/warehouses/edit', [InventoryDashboardController::class, 'editWarehouse'])->name('inventory.warehouses.edit');
 $router->post('/inventory/warehouses/update', [InventoryDashboardController::class, 'updateWarehouse'])->name('inventory.warehouses.update');
+$router->post('/inventory/warehouses/delete', [InventoryDashboardController::class, 'deleteWarehouse'])->name('inventory.warehouses.delete');
 
 $router->get('/inventory/stock-in', [InventoryDashboardController::class, 'stockIn'])->name('inventory.stock-in');
 $router->get('/inventory/stock-out', [InventoryDashboardController::class, 'stockOut'])->name('inventory.stock-out');

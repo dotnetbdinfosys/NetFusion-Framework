@@ -26,6 +26,7 @@ use NetFusion\Core\Http\Request;
 use NetFusion\Core\Http\Response;
 use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
 use NetFusion\App\Http\Helpers\SiteSettingsHelper;
+use NetFusion\App\Services\ModuleDataRepository;
 use DateTimeImmutable;
 use ZipArchive;
 
@@ -701,20 +702,24 @@ MyModule.zip
         $this->recursiveCopy($sourceDir, $destDir);
         $this->recursiveDelete($tmpExtractDir);
 
-        // Update module state
-        $stateFile = storage_path('framework/modules_state.json');
-        $states = is_file($stateFile) ? json_decode((string) file_get_contents($stateFile), true) : [];
-        if (!is_array($states)) {
-            $states = [];
-        }
-
-        $states[$moduleName] = [
-            'enabled'    => $autoEnable,
-            'name'       => $moduleName,
-            'version'    => $version,
-            'updated_at' => (new DateTimeImmutable())->format('c'),
-        ];
-        file_put_contents($stateFile, json_encode($states, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        // Update module state in MySQL
+        try {
+            $pdo = ModuleDataRepository::getPdo();
+            ModuleDataRepository::ensureTable('modules_state');
+            $stmt = $pdo->prepare("INSERT INTO `modules_state` (`module_name`, `enabled`, `state_payload`, `updated_at`) 
+                VALUES (?, ?, ?, NOW()) 
+                ON DUPLICATE KEY UPDATE `enabled` = VALUES(`enabled`), `state_payload` = VALUES(`state_payload`), `updated_at` = NOW()");
+            $stmt->execute([
+                $moduleName,
+                $autoEnable ? 1 : 0,
+                json_encode([
+                    'enabled'    => $autoEnable,
+                    'name'       => $moduleName,
+                    'version'    => $version,
+                    'updated_at' => (new DateTimeImmutable())->format('c'),
+                ], JSON_UNESCAPED_SLASHES)
+            ]);
+        } catch (\Throwable) {}
 
         try {
             app(\NetFusion\Core\Modules\ModuleLoader::class)->reset();
@@ -899,19 +904,24 @@ PHP;
 HTML;
         file_put_contents($moduleDir . '/Views/dashboard.php', $viewContent);
 
-        // 7. Update module states
-        $stateFile = storage_path('framework/modules_state.json');
-        $states = is_file($stateFile) ? json_decode((string) file_get_contents($stateFile), true) : [];
-        if (!is_array($states)) {
-            $states = [];
-        }
-        $states[$name] = [
-            'enabled'    => true,
-            'name'       => $name,
-            'version'    => '1.0.0',
-            'updated_at' => $now,
-        ];
-        file_put_contents($stateFile, json_encode($states, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        // 7. Update module states in MySQL
+        try {
+            $pdo = ModuleDataRepository::getPdo();
+            ModuleDataRepository::ensureTable('modules_state');
+            $stmt = $pdo->prepare("INSERT INTO `modules_state` (`module_name`, `enabled`, `state_payload`, `updated_at`) 
+                VALUES (?, ?, ?, NOW()) 
+                ON DUPLICATE KEY UPDATE `enabled` = VALUES(`enabled`), `state_payload` = VALUES(`state_payload`), `updated_at` = NOW()");
+            $stmt->execute([
+                $name,
+                1,
+                json_encode([
+                    'enabled'    => true,
+                    'name'       => $name,
+                    'version'    => '1.0.0',
+                    'updated_at' => $now,
+                ], JSON_UNESCAPED_SLASHES)
+            ]);
+        } catch (\Throwable) {}
 
         try {
             app(\NetFusion\Core\Modules\ModuleLoader::class)->reset();
@@ -1081,6 +1091,205 @@ CONTROLLER;
             }
         }
         @rmdir($dir);
+    }
+
+    /**
+     * Deleted Records Footprint Audit Interface
+     */
+    public function auditDeleted(Request $request): Response
+    {
+        $entityFilter = trim((string) $request->input('entity', ''));
+        $logs = ModuleDataRepository::getAuditDeletedRecords($entityFilter ?: null, 100);
+
+        $totalCount = count($logs);
+        $lastDeletedTime = !empty($logs) ? $logs[0]['created_at'] : 'কোনো ডাটা মোছা হয়নি';
+
+        $kpis = '
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+            ' . ModuleLayoutHelper::kpiCard('মোট মোছা রেকর্ড (Deleted Records)', (string)$totalCount, 'অডিট ফুটপ্রিন্ট লগ সংগৃহীত', '#dc2626') . '
+            ' . ModuleLayoutHelper::kpiCard('ডাটাবেজ ইঞ্জিন', 'MySQL 8.4', 'InnoDB Relational Engine', '#2563eb') . '
+            ' . ModuleLayoutHelper::kpiCard('অডিট ট্র্যাকিং স্ট্যাটাস', 'সক্রিয় (Active)', 'audit_deleted_records টেবিল', '#059669') . '
+            ' . ModuleLayoutHelper::kpiCard('সর্বশেষ মোছার সময়', $lastDeletedTime, 'বাংলাদেশ সময়', '#d97706') . '
+        </div>';
+
+        $entityOptions = [
+            '' => 'সকল মডিউল ও টেবিল (All Entities)',
+            'billing_invoices' => 'বিলিং ইনভয়েস (billing_invoices)',
+            'billing_plans' => 'বিলিং প্ল্যান (billing_plans)',
+            'billing_subscriptions' => 'বিলিং সাবস্ক্রিপশন (billing_subscriptions)',
+            'inventory_products' => 'ইনভেন্টরি পণ্য (inventory_products)',
+            'inventory_warehouses' => 'গুদামঘর (inventory_warehouses)',
+            'accounting_journal' => 'অ্যাকাউন্টিং জার্নাল (accounting_journal)',
+            'commerce_orders' => 'কমার্স অর্ডার (commerce_orders)',
+            'crm_leads' => 'সিআরএম লিড (crm_leads)',
+            'hrm_employees' => 'এইচআরএম কর্মকর্তা (hrm_employees)',
+            'tenants' => 'টেন্যান্ট (tenants)',
+            'users' => 'ব্যবহারকারী (system_users)',
+        ];
+
+        $filterSelect = '<select class="form-control" style="width:auto; min-width:240px; display:inline-block;" onchange="location.href=\'/system/audit/deleted?entity=\' + encodeURIComponent(this.value)">';
+        foreach ($entityOptions as $key => $lbl) {
+            $sel = ($entityFilter === $key) ? 'selected' : '';
+            $filterSelect .= "<option value=\"{$key}\" {$sel}>{$lbl}</option>";
+        }
+        $filterSelect .= '</select>';
+
+        $rowsHtml = '';
+        if (empty($logs)) {
+            $rowsHtml = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">✅ অডিট টেবিলে কোনো মোছা রেকর্ডের হিস্টোরি নেই। ফ্রেমওয়ার্কের সমস্ত ডাটা সুরক্ষিত রয়েছে।</td></tr>';
+        } else {
+            foreach ($logs as $row) {
+                $auditId = (int) $row['id'];
+                $entity = htmlspecialchars($row['entity'] ?? '');
+                $recordId = htmlspecialchars($row['record_id'] ?? '');
+                $deletedBy = htmlspecialchars($row['deleted_by'] ?? 'N/A');
+                $ipAddress = htmlspecialchars($row['ip_address'] ?? '127.0.0.1');
+                $userAgent = htmlspecialchars($row['user_agent'] ?? 'Unknown');
+                $createdAt = htmlspecialchars($row['created_at'] ?? '');
+                $reqUri = htmlspecialchars($row['request_uri'] ?? '');
+                $rawJson = htmlspecialchars($row['record_data'] ?? '{}', ENT_QUOTES, 'UTF-8');
+
+                $entityBadge = match ($entity) {
+                    'billing_invoices', 'billing_plans', 'billing_subscriptions' => ModuleLayoutHelper::badge($entity, 'info'),
+                    'inventory_products', 'inventory_warehouses' => ModuleLayoutHelper::badge($entity, 'warning'),
+                    'accounting_journal' => ModuleLayoutHelper::badge($entity, 'primary'),
+                    'commerce_orders' => ModuleLayoutHelper::badge($entity, 'warning'),
+                    'crm_leads' => ModuleLayoutHelper::badge($entity, 'success'),
+                    'hrm_employees' => ModuleLayoutHelper::badge($entity, 'danger'),
+                    default => ModuleLayoutHelper::badge($entity, 'secondary'),
+                };
+
+                $rowsHtml .= '
+                <tr id="audit-row-' . $auditId . '">
+                    <td><code>#' . $auditId . '</code></td>
+                    <td>' . $entityBadge . '</td>
+                    <td><strong>' . $recordId . '</strong></td>
+                    <td><span style="font-weight:600; color:#1e293b;">👤 ' . $deletedBy . '</span></td>
+                    <td>
+                        <span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:11.5px;">🌐 ' . $ipAddress . '</span>
+                        <div style="font-size:11px; color:#64748b; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' . $userAgent . '">' . $userAgent . '</div>
+                    </td>
+                    <td style="font-size:12px; color:#475569;">🕒 ' . $createdAt . '<br><small style="color:#94a3b8;">' . $reqUri . '</small></td>
+                    <td>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick=\'viewSnapshot(' . $rawJson . ', "' . $recordId . '", "' . $entity . '")\'>👁️ স্ন্যাপশট</button>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#065f46; border-color:#a7f3d0;" onclick="restoreDeletedRecord(' . $auditId . ', \'' . $recordId . '\')">🔄 রিস্টোর</button>
+                    </td>
+                </tr>';
+            }
+        }
+
+        $body = '
+        ' . $kpis . '
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">🐾 মোছা ডাটা ফুটপ্রিন্ট ও অডিট ট্র্যাকিং (Deleted Data Footprints)</h2>
+                <p style="margin:0; font-size:13px; color:#64748b;">সকল মডিউল থেকে কোনো ডাটা মুছে ফেলা হলে ইউজারের সম্পূর্ণ ফুটপ্রিন্ট ও মূল তথ্যের স্ন্যাপশট</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label style="font-weight:600; font-size:13px; color:#475569;">মডিউল ফিল্টার:</label>
+                ' . $filterSelect . '
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>অডিট ID</th>
+                            <th>মডিউল / টেবিল</th>
+                            <th>রেকর্ড ID</th>
+                            <th>কে মুছেছে (Deleted By)</th>
+                            <th>আইপি ও ব্রাউজার (Footprint)</th>
+                            <th>তারিখ ও সময়</th>
+                            <th>ডাটা স্ন্যাপশট</th>
+                            <th>অ্যাকশন</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ' . $rowsHtml . '
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Snapshot Viewer Modal -->
+        <div id="snapshotModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(3px);">
+            <div style="background:#ffffff; border-radius:12px; width:100%; max-width:650px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1); padding:24px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+                    <h3 id="snapshotModalTitle" style="margin:0; font-size:17px; font-weight:700; color:#1e293b;">📋 ডাটা ফুটপ্রিন্ট স্ন্যাপশট</h3>
+                    <button type="button" onclick="closeSnapshotModal()" style="border:none; background:none; font-size:20px; cursor:pointer; color:#94a3b8;">&times;</button>
+                </div>
+                <div id="snapshotContent" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; font-family:monospace; font-size:12.5px; white-space:pre-wrap; max-height:400px; overflow-y:auto; color:#0f172a;"></div>
+                <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeSnapshotModal()">বন্ধ করুন</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        function viewSnapshot(data, recordId, entity) {
+            document.getElementById("snapshotModalTitle").innerText = "📋 " + entity + " (" + recordId + ") — মোছার পূর্ববর্তী সম্পূর্ণ ডাটা";
+            document.getElementById("snapshotContent").innerText = JSON.stringify(data, null, 4);
+            document.getElementById("snapshotModal").style.display = "flex";
+        }
+        function closeSnapshotModal() {
+            document.getElementById("snapshotModal").style.display = "none";
+        }
+        function restoreDeletedRecord(auditId, recordId) {
+            if (!confirm("⚠️ আপনি কি নিশ্চিতভাবে এই রেকর্ডটি (#" + recordId + ") পুনরায় মূল ডেটাবেজ টেবিলে ফিরিয়ে আনতে চান?")) {
+                return;
+            }
+            const formData = new FormData();
+            formData.append("audit_id", auditId);
+
+            fetch("/system/audit/restore", {
+                method: "POST",
+                headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert("✅ " + data.message);
+                    location.reload();
+                } else {
+                    alert("❌ পুনরুদ্ধার ব্যর্থ হয়েছে: " + (data.message || "ত্রুটি"));
+                }
+            })
+            .catch(err => alert("ত্রুটি: " + err));
+        }
+        </script>
+        ';
+
+        return Response::html(ModuleLayoutHelper::wrap('system', 'অডিট ও ডিলিট ফুটপ্রিন্ট', $body, '', '', '/system/audit/deleted'));
+    }
+
+    /**
+     * Restore a deleted record from audit footprint back into MySQL
+     */
+    public function restoreDeleted(Request $request): Response
+    {
+        $auditId = (int) $request->input('audit_id', 0);
+        if ($auditId <= 0) {
+            return Response::json(['success' => false, 'message' => 'সঠিক অডিট আইডি প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $restored = ModuleDataRepository::restoreDeletedRecord($auditId);
+        if ($restored) {
+            return Response::json([
+                'success' => true,
+                'message' => 'রেকর্ডটি সফলভাবে মূল MySQL টেবিলে পুনরুদ্ধার করা হয়েছে।'
+            ]);
+        }
+
+        return Response::json([
+            'success' => false,
+            'message' => 'রেকর্ডটি পুনরুদ্ধার করা সম্ভব হয়নি।'
+        ], 500);
     }
 }
 

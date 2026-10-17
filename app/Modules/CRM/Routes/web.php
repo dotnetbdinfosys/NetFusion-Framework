@@ -29,6 +29,7 @@ $router->get('/crm', [CrmDashboardController::class, 'index'])->name('crm.dashbo
 $router->get('/crm/leads', [CrmDashboardController::class, 'leads'])->name('crm.leads');
 $router->get('/crm/leads/edit', [CrmDashboardController::class, 'editLead'])->name('crm.leads.edit');
 $router->post('/crm/leads/update', [CrmDashboardController::class, 'updateLead'])->name('crm.leads.update');
+$router->post('/crm/leads/delete', [CrmDashboardController::class, 'deleteLead'])->name('crm.leads.delete');
 $router->get('/crm/deals', [CrmDashboardController::class, 'deals'])->name('crm.deals');
 $router->get('/crm/companies', [CrmDashboardController::class, 'companies'])->name('crm.companies');
 $router->get('/crm/contacts', [CrmDashboardController::class, 'contacts'])->name('crm.contacts');

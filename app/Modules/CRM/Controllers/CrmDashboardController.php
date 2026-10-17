@@ -226,6 +226,7 @@ class CrmDashboardController
                     <div style="display:flex; gap:6px; align-items:center;">
                         <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#059669; border-color:#a7f3d0;" onclick=\'openEditLeadModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
                         <a href="/crm/leads/edit?id=' . urlencode($id) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'crm_leads\', \'' . $id . '\', \'/crm/leads/delete\', \'' . htmlspecialchars($name, ENT_QUOTES) . ' (' . $id . ')\')">🗑️ মুছুন</button>
                     </div>
                 </td>
             </tr>';
@@ -704,5 +705,27 @@ class CrmDashboardController
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('crm', 'সেলস অ্যানালিটিকস', $body, '', '', '/crm/analytics'));
+    }
+
+    /**
+     * Delete a lead and log audit footprint to MySQL
+     */
+    public function deleteLead(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'লিড আইডি প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $lead = ModuleDataRepository::find('crm_leads', 'id', $id);
+        if (!$lead) {
+            return Response::json(['success' => false, 'message' => 'লিড পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('crm_leads', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "লিড {$lead['name']} ({$id}) সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'লিড মুছতে ব্যর্থ হয়েছে।'], 500);
     }
 }

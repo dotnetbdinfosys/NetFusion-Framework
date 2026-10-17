@@ -31,6 +31,7 @@ $router->get('/accounting/journal', [AccountingDashboardController::class, 'jour
 $router->get('/accounting/journal/edit', [AccountingDashboardController::class, 'editJournalEntry'])->name('accounting.journal.edit');
 $router->post('/accounting/journal/edit', [AccountingDashboardController::class, 'updateJournalEntry']);
 $router->post('/accounting/journal/update', [AccountingDashboardController::class, 'updateJournalEntry'])->name('accounting.journal.update');
+$router->post('/accounting/journal/delete', [AccountingDashboardController::class, 'deleteJournalEntry'])->name('accounting.journal.delete');
 $router->get('/accounting/ledger', [AccountingDashboardController::class, 'ledger'])->name('accounting.ledger');
 $router->get('/accounting/trial-balance', [AccountingDashboardController::class, 'trialBalance'])->name('accounting.trial-balance');
 $router->get('/accounting/income-statement', [AccountingDashboardController::class, 'incomeStatement'])->name('accounting.income-statement');

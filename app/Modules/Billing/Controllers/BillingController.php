@@ -254,6 +254,7 @@ class BillingController
                         <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#5b21b6; border-color:#ddd6fe;" onclick=\'openEditInvoiceModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
                         <a href="/billing/invoices/edit?id=' . urlencode($invId) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
                         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="window.print()">রশিদ</button>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'billing_invoices\', \'' . $invId . '\', \'/billing/invoices/delete\', \'' . htmlspecialchars($customer, ENT_QUOTES) . ' (' . $invId . ')\')">🗑️ মুছুন</button>
                     </div>
                 </td>
             </tr>';
@@ -623,7 +624,7 @@ class BillingController
             $jsonAttr = htmlspecialchars(json_encode($sub, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 
             $rowsHtml .= '
-            <tr>
+            <tr id="row-' . $subId . '">
                 <td><code>' . $subId . '</code></td>
                 <td><strong>' . $customer . '</strong></td>
                 <td>' . $plan . '</td>
@@ -632,7 +633,10 @@ class BillingController
                 <td>' . $autoRenew . '</td>
                 <td>' . ModuleLayoutHelper::badge($statusText, $badgeType) . '</td>
                 <td>
-                    <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#5b21b6;" onclick=\'openEditSubModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#5b21b6;" onclick=\'openEditSubModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'billing_subscriptions\', \'' . $subId . '\', \'/billing/subscriptions/delete\', \'' . htmlspecialchars($customer, ENT_QUOTES) . ' (' . $subId . ')\')">🗑️ মুছুন</button>
+                    </div>
                 </td>
             </tr>';
         }
@@ -838,7 +842,7 @@ class BillingController
             $jsonAttr = htmlspecialchars(json_encode($plan, JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8');
 
             $cardsHtml .= '
-            <div class="card" style="border-top:4px solid ' . $topColor . ';">
+            <div class="card" id="row-' . $planId . '" style="border-top:4px solid ' . $topColor . ';">
                 <div class="card-header">
                     <span class="card-title">' . $name . '</span>
                     <span style="font-weight:700; color:' . $topColor . ';">' . ModuleLayoutHelper::currency($price) . ' / ' . $interval . '</span>
@@ -850,6 +854,7 @@ class BillingController
                     <div style="display:flex; gap:8px;">
                         <button type="button" class="btn btn-secondary" style="flex:1;" onclick=\'openEditPlanModal(' . $jsonAttr . ')\'>✏️ এডিট প্ল্যান</button>
                         <a href="/billing/plans/edit?id=' . urlencode($planId) . '" class="btn btn-secondary" style="padding:6px 12px;" title="ফুল পেজ এডিট">📄</a>
+                        <button type="button" class="btn btn-secondary" style="padding:6px 10px; color:#dc2626; border-color:#fecaca;" title="প্ল্যান মুছে ফেলুন" onclick="confirmDeleteRecord(\'billing_plans\', \'' . $planId . '\', \'/billing/plans/delete\', \'' . htmlspecialchars($name, ENT_QUOTES) . '\')">🗑️</button>
                     </div>
                 </div>
             </div>';
@@ -1150,5 +1155,71 @@ class BillingController
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('billing', 'বকেয়া ও ড্যু', $body, '', '', '/billing/overdue'));
+    }
+
+    /**
+     * Delete an invoice and log audit footprint to MySQL
+     */
+    public function deleteInvoice(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'ইনভয়েস আইডি প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $inv = ModuleDataRepository::find('billing_invoices', 'id', $id);
+        if (!$inv) {
+            return Response::json(['success' => false, 'message' => 'ইনভয়েসটি পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('billing_invoices', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "ইনভয়েস #{$id} সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'ইনভয়েস মুছতে ব্যর্থ হয়েছে।'], 500);
+    }
+
+    /**
+     * Delete a subscription and log audit footprint to MySQL
+     */
+    public function deleteSubscription(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'সাবস্ক্রিপশন আইডি প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $sub = ModuleDataRepository::find('billing_subscriptions', 'id', $id);
+        if (!$sub) {
+            return Response::json(['success' => false, 'message' => 'সাবস্ক্রিপশন পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('billing_subscriptions', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "সাবস্ক্রিপশন #{$id} সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'সাবস্ক্রিপশন মুছতে ব্যর্থ হয়েছে।'], 500);
+    }
+
+    /**
+     * Delete a plan and log audit footprint to MySQL
+     */
+    public function deletePlan(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'প্ল্যান আইডি প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $plan = ModuleDataRepository::find('billing_plans', 'id', $id);
+        if (!$plan) {
+            return Response::json(['success' => false, 'message' => 'প্যাকেজ প্ল্যান পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('billing_plans', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "প্যাকেজ প্ল্যান {$plan['name']} সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'প্ল্যান মুছতে ব্যর্থ হয়েছে।'], 500);
     }
 }

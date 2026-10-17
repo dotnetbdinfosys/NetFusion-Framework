@@ -136,6 +136,7 @@ class ModuleLayoutHelper
                 ['icon' => '📦', 'label_en' => 'Modules Inspector', 'label_bn' => 'মডিউল ইনস্পেক্টর', 'url' => '/system/modules'],
                 ['icon' => '📤', 'label_en' => 'Upload Module/Ext', 'label_bn' => 'মডিউল/এক্সটেনশন আপলোড', 'url' => '/system/modules/upload'],
                 ['icon' => '🩺', 'label_en' => 'System Health', 'label_bn' => 'সিস্টেম হেলথ', 'url' => '/health'],
+                ['icon' => '🐾', 'label_en' => 'Audit & Deleted Footprints', 'label_bn' => 'অডিট ও ডিলিট ফুটপ্রিন্ট', 'url' => '/system/audit/deleted'],
             ],
         ],
     ];
@@ -515,6 +516,56 @@ class ModuleLayoutHelper
         </footer>
     </div>
 
+    <script>
+    function confirmDeleteRecord(entity, id, deleteUrl, label) {
+        const recordLabel = label || id;
+        const confirmMsg = "⚠️ আপনি কি নিশ্চিতভাবে '" + recordLabel + "' মুছে ফেলতে চান?\n\nফুটপ্রিন্ট ট্রেসিং: এই ডাটা মোছার সাথে সাথে আপনার ইউজার আইডি, আইপি অ্যাড্রেস, টাইমস্ট্যাম্প ও সম্পূর্ণ ডাটার স্ন্যাপশট অডিট ফুটপ্রিন্ট টেবিলে সংরক্ষিত হবে।";
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('entity', entity);
+
+        fetch(deleteUrl, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.getElementById('row-' + id) || document.getElementById('row-' + encodeURIComponent(id));
+                if (row) {
+                    row.style.transition = 'all 0.4s ease';
+                    row.style.background = '#fee2e2';
+                    row.style.opacity = '0';
+                    setTimeout(() => row.remove(), 400);
+                }
+                alert('✅ ' + (data.message || 'রেকর্ডটি সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষণ করা হয়েছে!'));
+            } else {
+                alert('❌ ডিলিট ব্যর্থ হয়েছে: ' + (data.message || 'অজানা ত্রুটি'));
+            }
+        })
+        .catch(err => {
+            // Fallback: standard POST form
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = deleteUrl;
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'id';
+            input.value = id;
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+        });
+    }
+    </script>
     {$extraJs}
 </body>
 </html>

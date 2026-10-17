@@ -28,6 +28,7 @@ namespace NetFusion\App\Http\Controllers;
 
 use DateTimeImmutable;
 use NetFusion\App\Http\Helpers\SiteSettingsHelper;
+use NetFusion\App\Services\ModuleDataRepository;
 use NetFusion\Core\Database\DatabaseManager;
 use NetFusion\Core\Foundation\License\LicenseManager;
 use NetFusion\Core\Foundation\Release\FrameworkReleaseManifest;
@@ -124,23 +125,23 @@ class DashboardController
             json_encode($manifestData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
         );
 
-        // Sync storage modules_state.json
-        $stateFile = storage_path('framework/modules_state.json');
-        $dir = dirname($stateFile);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
-        }
-
-        $states = is_file($stateFile) ? json_decode((string) file_get_contents($stateFile), true) : [];
-        if (!is_array($states)) {
-            $states = [];
-        }
-        $states[$targetDir] = [
-            'enabled'    => $enabled,
-            'name'       => $manifestData['name'] ?? $targetDir,
-            'updated_at' => $manifestData['updated_at'],
-        ];
-        file_put_contents($stateFile, json_encode($states, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        // Sync modules_state into MySQL
+        try {
+            $pdo = ModuleDataRepository::getPdo();
+            ModuleDataRepository::ensureTable('modules_state');
+            $stmt = $pdo->prepare("INSERT INTO `modules_state` (`module_name`, `enabled`, `state_payload`, `updated_at`) 
+                VALUES (?, ?, ?, NOW()) 
+                ON DUPLICATE KEY UPDATE `enabled` = VALUES(`enabled`), `state_payload` = VALUES(`state_payload`), `updated_at` = NOW()");
+            $stmt->execute([
+                $targetDir,
+                $enabled ? 1 : 0,
+                json_encode([
+                    'enabled'    => $enabled,
+                    'name'       => $manifestData['name'] ?? $targetDir,
+                    'updated_at' => $manifestData['updated_at'],
+                ], JSON_UNESCAPED_SLASHES)
+            ]);
+        } catch (\Throwable $e) {}
 
         $statusTextBn = $enabled ? 'সক্রিয় (ON)' : 'নিষ্ক্রিয় (OFF)';
 
@@ -182,13 +183,11 @@ class DashboardController
             ], 404);
         }
 
-        $activeTenantFile = storage_path('framework/active_tenant.json');
-        $dir = dirname($activeTenantFile);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            @session_start();
         }
-
-        file_put_contents($activeTenantFile, json_encode($found, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $_SESSION['active_tenant_id'] = $found['id'];
+        SiteSettingsHelper::save(['active_tenant_id' => $found['id']]);
 
         return Response::json([
             'success'       => true,
@@ -299,13 +298,9 @@ class DashboardController
 
         $this->saveTenants($tenants);
 
-        // Also update active_tenant.json if this is currently the active tenant
-        $activeTenantFile = storage_path('framework/active_tenant.json');
-        if (is_file($activeTenantFile)) {
-            $activeData = json_decode((string) file_get_contents($activeTenantFile), true);
-            if (is_array($activeData) && ($activeData['id'] ?? '') === $id) {
-                file_put_contents($activeTenantFile, json_encode($updated, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-            }
+        // Also update session if this is currently the active tenant
+        if (!empty($_SESSION['active_tenant_id']) && $_SESSION['active_tenant_id'] === $id) {
+            SiteSettingsHelper::save(['active_tenant_id' => $id]);
         }
 
         return Response::json([
@@ -554,10 +549,9 @@ class DashboardController
      */
     protected function loadTenants(): array
     {
-        $tenantsFile = storage_path('framework/tenants.json');
-        if (is_file($tenantsFile)) {
-            $data = json_decode((string) file_get_contents($tenantsFile), true);
-            if (is_array($data) && !empty($data)) {
+        try {
+            $data = ModuleDataRepository::all('tenants');
+            if (!empty($data)) {
                 foreach ($data as &$t) {
                     $t['site_title']  = $t['site_title'] ?? ($t['name'] . ' Portal');
                     $t['description'] = $t['description'] ?? 'Enterprise tenant workspace on NetFusion platform.';
@@ -565,71 +559,36 @@ class DashboardController
                 unset($t);
                 return $data;
             }
-        }
+        } catch (\Throwable $e) {}
 
-        $defaultTenants = [
-            [
-                'id'          => 'tenant_primary',
-                'name'        => 'DotNetBD Corporate HQ',
-                'site_title'  => 'DotNetBD Corporate Hub',
-                'description' => 'Primary headquarters tenant for enterprise operations, financial consolidation, and executive governance.',
-                'domain'      => 'corporate.nff.dotnetbd.com',
-                'driver'      => 'database',
-                'status'      => 'Active',
-                'users'       => 24,
-                'created_at'  => '2026-01-10',
-            ],
-            [
-                'id'          => 'tenant_enterprise',
-                'name'        => 'Apex Enterprise Global',
-                'site_title'  => 'Apex Global Commerce Portal',
-                'description' => 'Multinational supply-chain and global distribution channel for Apex Enterprise subsidiaries.',
-                'domain'      => 'apex.nff.dotnetbd.com',
-                'driver'      => 'column_scoped',
-                'status'      => 'Active',
-                'users'       => 86,
-                'created_at'  => '2026-02-15',
-            ],
-            [
-                'id'          => 'tenant_sandbox',
-                'name'        => 'SaaS Sandbox Org',
-                'site_title'  => 'SaaS Testing & Sandbox',
-                'description' => 'Isolated staging environment for third-party integrations, webhook testing, and developer pilots.',
-                'domain'      => 'sandbox.nff.dotnetbd.com',
-                'driver'      => 'schema_scoped',
-                'status'      => 'Trial',
-                'users'       => 5,
-                'created_at'  => '2026-03-01',
-            ],
-        ];
-
+        $defaultTenants = ModuleDataRepository::getDefaults('tenants');
         $this->saveTenants($defaultTenants);
         return $defaultTenants;
     }
 
     /**
-     * Save tenants to storage file.
+     * Save tenants to MySQL database.
      */
     protected function saveTenants(array $tenants): void
     {
-        $tenantsFile = storage_path('framework/tenants.json');
-        $dir = dirname($tenantsFile);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
-        }
-        file_put_contents($tenantsFile, json_encode($tenants, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        ModuleDataRepository::save('tenants', $tenants);
     }
 
     /**
-     * Load current active tenant context.
+     * Load current active tenant context from session/site_settings.
      */
     protected function loadActiveTenant(array $allTenants): array
     {
-        $activeTenantFile = storage_path('framework/active_tenant.json');
-        if (is_file($activeTenantFile)) {
-            $data = json_decode((string) file_get_contents($activeTenantFile), true);
-            if (is_array($data) && !empty($data['id'])) {
-                return $data;
+        $activeId = $_SESSION['active_tenant_id'] ?? null;
+        if (!$activeId) {
+            $settings = SiteSettingsHelper::get();
+            $activeId = $settings['active_tenant_id'] ?? null;
+        }
+
+        if ($activeId) {
+            $found = ModuleDataRepository::find('tenants', 'id', $activeId);
+            if ($found) {
+                return $found;
             }
         }
 
@@ -640,12 +599,6 @@ class DashboardController
             'driver' => 'database',
             'status' => 'Active',
         ];
-
-        $dir = dirname($activeTenantFile);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
-        }
-        file_put_contents($activeTenantFile, json_encode($fallback, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         return $fallback;
     }
@@ -731,77 +684,24 @@ class DashboardController
      */
     protected function loadUsers(): array
     {
-        $usersFile = storage_path('framework/users.json');
-        if (is_file($usersFile)) {
-            $data = json_decode((string) file_get_contents($usersFile), true);
-            if (is_array($data) && !empty($data)) {
+        try {
+            $data = ModuleDataRepository::all('users');
+            if (!empty($data)) {
                 return $data;
             }
-        }
+        } catch (\Throwable $e) {}
 
-        $defaultUsers = [
-            [
-                'id'         => 'usr_001',
-                'name'       => 'Md. Atiquzzaman Ashish',
-                'email'      => 'ashish@dotnetbd.com',
-                'role'       => 'super_admin',
-                'tenant_id'  => 'tenant_primary',
-                'status'     => 'Active',
-                'created_at' => '2026-01-01 10:00',
-            ],
-            [
-                'id'         => 'usr_002',
-                'name'       => 'Tanvir Rahman',
-                'email'      => 'tanvir@corporate.com',
-                'role'       => 'tenant_admin',
-                'tenant_id'  => 'tenant_primary',
-                'status'     => 'Active',
-                'created_at' => '2026-01-12 11:30',
-            ],
-            [
-                'id'         => 'usr_003',
-                'name'       => 'Nusrat Jahan',
-                'email'      => 'nusrat@apex.com',
-                'role'       => 'manager',
-                'tenant_id'  => 'tenant_enterprise',
-                'status'     => 'Active',
-                'created_at' => '2026-02-18 14:15',
-            ],
-            [
-                'id'         => 'usr_004',
-                'name'       => 'Kamal Hossain',
-                'email'      => 'kamal@corporate.com',
-                'role'       => 'staff',
-                'tenant_id'  => 'tenant_primary',
-                'status'     => 'Active',
-                'created_at' => '2026-03-02 09:45',
-            ],
-            [
-                'id'         => 'usr_005',
-                'name'       => 'Rafiqul Islam',
-                'email'      => 'rafiq@client.com',
-                'role'       => 'client',
-                'tenant_id'  => 'tenant_sandbox',
-                'status'     => 'Active',
-                'created_at' => '2026-03-10 16:20',
-            ],
-        ];
-
+        $defaultUsers = ModuleDataRepository::getDefaults('users');
         $this->saveUsers($defaultUsers);
         return $defaultUsers;
     }
 
     /**
-     * Save users to storage file.
+     * Save users to MySQL database.
      */
     protected function saveUsers(array $users): void
     {
-        $usersFile = storage_path('framework/users.json');
-        $dir = dirname($usersFile);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
-        }
-        file_put_contents($usersFile, json_encode($users, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        ModuleDataRepository::save('users', $users);
     }
 
     /**

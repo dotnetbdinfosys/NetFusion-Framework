@@ -9,9 +9,10 @@ declare(strict_types=1);
 |
 | File      : app/Services/ModuleDataRepository.php
 | Namespace : NetFusion\App\Services
-| Purpose   : Universal persistent JSON data repository for all HMVC modules.
-|             Provides seamless CRUD operations for invoices, items, plans,
-|             bills, journal entries, and orders without hard DB requirements.
+| Purpose   : Universal persistent MySQL Database repository for all HMVC modules.
+|             Directly manages database persistence for invoices, products, plans,
+|             orders, journal entries, leads, employees, tenants, and users with
+|             strict audit footprint tracking for any deleted records.
 |
 | Author    : Md. Atiquzzaman Ashish
 | Company   : DotNetBD
@@ -23,142 +24,653 @@ declare(strict_types=1);
 
 namespace NetFusion\App\Services;
 
+use PDO;
+use PDOException;
+use Throwable;
+
 class ModuleDataRepository
 {
     /**
-     * Get storage file path for an entity.
+     * Cached PDO connection instance.
      */
-    public static function getFilePath(string $entity): string
+    protected static ?PDO $pdo = null;
+
+    /**
+     * Cache of verified tables in current runtime.
+     *
+     * @var array<string, bool>
+     */
+    protected static array $verifiedTables = [];
+
+    /**
+     * Get active MySQL PDO connection instance.
+     */
+    public static function getPdo(): PDO
     {
-        if (function_exists('storage_path') && function_exists('app')) {
+        if (self::$pdo !== null) {
+            return self::$pdo;
+        }
+
+        // Try resolving through Framework Database Manager
+        if (function_exists('db')) {
             try {
-                $app = app();
-                if (is_object($app) && method_exists($app, 'storagePath')) {
-                    return storage_path("framework/{$entity}.json");
+                $dbConn = db()->connection();
+                if ($dbConn && method_exists($dbConn, 'getPdo')) {
+                    $pdo = $dbConn->getPdo();
+                    if ($pdo instanceof PDO) {
+                        self::$pdo = $pdo;
+                        self::$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                        self::$pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+                        return self::$pdo;
+                    }
                 }
-            } catch (\Throwable $e) {
-                // fallback below
+            } catch (Throwable $e) {
+                // fallback to environment variables
             }
         }
-        $base = defined('NETFUSION_BASE_PATH') ? NETFUSION_BASE_PATH : dirname(__DIR__, 2);
-        return $base . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'framework' . DIRECTORY_SEPARATOR . "{$entity}.json";
+
+        // Direct PDO fallback using environment variables
+        $host = $_ENV['DB_HOST'] ?? getenv('DB_HOST') ?: '127.0.0.1';
+        $port = $_ENV['DB_PORT'] ?? getenv('DB_PORT') ?: '3306';
+        $database = $_ENV['DB_DATABASE'] ?? getenv('DB_DATABASE') ?: 'netfusion_db';
+        $username = $_ENV['DB_USERNAME'] ?? getenv('DB_USERNAME') ?: 'root';
+        $password = $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD') ?: '';
+        $charset = $_ENV['DB_CHARSET'] ?? getenv('DB_CHARSET') ?: 'utf8mb4';
+
+        $dsn = "mysql:host={$host};port={$port};dbname={$database};charset={$charset}";
+
+        self::$pdo = new PDO($dsn, $username, $password, [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+        ]);
+
+        return self::$pdo;
     }
 
     /**
-     * Retrieve all items for an entity. Auto-seeds default dataset if missing.
+     * Ensure the MySQL table exists and seed defaults if empty.
+     */
+    public static function ensureTable(string $entity): void
+    {
+        $table = self::resolveTableName($entity);
+
+        if (isset(self::$verifiedTables[$table])) {
+            return;
+        }
+
+        $pdo = self::getPdo();
+
+        // Ensure audit table exists first
+        if (!isset(self::$verifiedTables['audit_deleted_records'])) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `audit_deleted_records` (
+                `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                `entity` VARCHAR(100) NOT NULL,
+                `record_id` VARCHAR(100) NOT NULL,
+                `record_data` LONGTEXT NOT NULL COMMENT 'JSON snapshot of deleted record',
+                `deleted_by` VARCHAR(150) NULL COMMENT 'User ID or Name',
+                `ip_address` VARCHAR(50) NULL COMMENT 'Client IP',
+                `user_agent` TEXT NULL COMMENT 'Client User Agent',
+                `request_uri` TEXT NULL COMMENT 'Endpoint URL',
+                `request_method` VARCHAR(10) NULL COMMENT 'HTTP Method',
+                `created_at` DATETIME NOT NULL COMMENT 'Timestamp of deletion',
+                INDEX `idx_entity` (`entity`),
+                INDEX `idx_record_id` (`record_id`),
+                INDEX `idx_created_at` (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            self::$verifiedTables['audit_deleted_records'] = true;
+        }
+
+        $schema = self::getTableSchema($table);
+        if ($schema !== null) {
+            $pdo->exec($schema);
+        } else {
+            // Generic dynamic table for custom entities
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `{$table}` (
+                `id` VARCHAR(100) NOT NULL PRIMARY KEY,
+                `data_payload` JSON NULL,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        }
+
+        self::$verifiedTables[$table] = true;
+
+        // Auto-seed defaults if table is empty
+        $count = (int) $pdo->query("SELECT COUNT(*) FROM `{$table}`")->fetchColumn();
+        if ($count === 0) {
+            $defaults = self::getDefaults($entity);
+            if (!empty($defaults)) {
+                foreach ($defaults as $record) {
+                    self::insertDirect($table, $record);
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve entity to table name.
+     */
+    public static function resolveTableName(string $entity): string
+    {
+        return match ($entity) {
+            'users' => 'system_users',
+            default => preg_replace('/[^a-zA-Z0-9_]/', '_', $entity),
+        };
+    }
+
+    /**
+     * Retrieve all records for an entity directly from MySQL.
      *
      * @return array<int, array<string, mixed>>
      */
     public static function all(string $entity): array
     {
-        $file = self::getFilePath($entity);
-        if (!file_exists($file)) {
-            $defaults = self::getDefaults($entity);
-            self::save($entity, $defaults);
-            return $defaults;
-        }
+        self::ensureTable($entity);
+        $table = self::resolveTableName($entity);
+        $pdo = self::getPdo();
 
-        $content = (string) file_get_contents($file);
-        $data = json_decode($content, true);
-        if (!is_array($data)) {
-            $defaults = self::getDefaults($entity);
-            self::save($entity, $defaults);
-            return $defaults;
-        }
+        $stmt = $pdo->query("SELECT * FROM `{$table}` ORDER BY `id` ASC");
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return $data;
+        // Auto-cast numerical and JSON fields
+        foreach ($results as &$row) {
+            self::formatRow($row);
+        }
+        unset($row);
+
+        return $results;
     }
 
     /**
-     * Find a single item by key and value.
+     * Find a single record by key and value directly in MySQL.
      *
      * @return array<string, mixed>|null
      */
     public static function find(string $entity, string $key, mixed $value): ?array
     {
-        $items = self::all($entity);
-        foreach ($items as $item) {
-            if (isset($item[$key]) && (string) $item[$key] === (string) $value) {
-                return $item;
-            }
+        self::ensureTable($entity);
+        $table = self::resolveTableName($entity);
+        $pdo = self::getPdo();
+
+        $safeKey = preg_replace('/[^a-zA-Z0-9_]/', '', $key);
+        $stmt = $pdo->prepare("SELECT * FROM `{$table}` WHERE `{$safeKey}` = ? LIMIT 1");
+        $stmt->execute([(string) $value]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            return null;
         }
-        return null;
+
+        self::formatRow($row);
+        return $row;
     }
 
     /**
-     * Update an item matching the key/value criteria.
-     *
-     * @param array<string, mixed> $newData
-     */
-    public static function update(string $entity, string $key, mixed $value, array $newData): bool
-    {
-        $items = self::all($entity);
-        $found = false;
-
-        foreach ($items as $idx => $item) {
-            if (isset($item[$key]) && (string) $item[$key] === (string) $value) {
-                $items[$idx] = array_merge($item, $newData);
-                $items[$idx]['updated_at'] = date('Y-m-d H:i:s');
-                $found = true;
-                break;
-            }
-        }
-
-        if ($found) {
-            return self::save($entity, $items);
-        }
-
-        return false;
-    }
-
-    /**
-     * Insert a new item into the entity collection.
+     * Insert a new record into MySQL table.
      *
      * @param array<string, mixed> $record
      */
     public static function insert(string $entity, array $record): bool
     {
-        $items = self::all($entity);
-        $record['created_at'] = $record['created_at'] ?? date('Y-m-d H:i:s');
-        $record['updated_at'] = date('Y-m-d H:i:s');
-        $items[] = $record;
-        return self::save($entity, $items);
+        self::ensureTable($entity);
+        $table = self::resolveTableName($entity);
+        return self::insertDirect($table, $record);
+    }
+
+    /**
+     * Update an item matching the key/value criteria directly in MySQL.
+     *
+     * @param array<string, mixed> $newData
+     */
+    public static function update(string $entity, string $key, mixed $value, array $newData): bool
+    {
+        self::ensureTable($entity);
+        $table = self::resolveTableName($entity);
+        $pdo = self::getPdo();
+
+        $tableCols = self::getTableColumns($table);
+        $safeKey = preg_replace('/[^a-zA-Z0-9_]/', '', $key);
+
+        $updateFields = [];
+        $bindings = [];
+
+        foreach ($newData as $k => $v) {
+            if ($k === $key || !in_array($k, $tableCols, true)) {
+                continue;
+            }
+            $updateFields[] = "`{$k}` = ?";
+            $bindings[] = is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : $v;
+        }
+
+        if (in_array('updated_at', $tableCols, true) && !isset($newData['updated_at'])) {
+            $updateFields[] = "`updated_at` = ?";
+            $bindings[] = date('Y-m-d H:i:s');
+        }
+
+        if (empty($updateFields)) {
+            return true;
+        }
+
+        $bindings[] = (string) $value;
+        $sql = "UPDATE `{$table}` SET " . implode(', ', $updateFields) . " WHERE `{$safeKey}` = ?";
+
+        $stmt = $pdo->prepare($sql);
+        return $stmt->execute($bindings);
     }
 
     /**
      * Delete an item matching the key/value criteria.
+     *
+     * CRITICAL AUDIT REQUIREMENT:
+     * Automatically captures the full snapshot of the record, the user footprint,
+     * IP address, user-agent, and endpoint, saving them in `audit_deleted_records`
+     * before deleting the record from MySQL.
+     *
+     * @param array<string, mixed>|null $footprintMeta
      */
-    public static function delete(string $entity, string $key, mixed $value): bool
+    public static function delete(string $entity, string $key, mixed $value, ?array $footprintMeta = null): bool
     {
-        $items = self::all($entity);
-        $originalCount = count($items);
-        $filtered = array_values(array_filter($items, function ($item) use ($key, $value) {
-            return !(isset($item[$key]) && (string) $item[$key] === (string) $value);
-        }));
+        self::ensureTable($entity);
+        $table = self::resolveTableName($entity);
+        $pdo = self::getPdo();
 
-        if (count($filtered) !== $originalCount) {
-            return self::save($entity, $filtered);
+        // 1. Fetch exact record before deletion
+        $record = self::find($entity, $key, $value);
+        if (!$record) {
+            return false;
         }
 
-        return false;
+        // 2. Capture audit footprint
+        $recordId = (string) ($record['id'] ?? $value);
+        $recordJson = json_encode($record, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        // Resolve user identity
+        $deletedBy = $footprintMeta['user'] ?? null;
+        if (empty($deletedBy)) {
+            if (function_exists('auth')) {
+                try {
+                    $authUser = auth()->user();
+                    if ($authUser) {
+                        $deletedBy = $authUser->email ?? $authUser->name ?? $authUser->id ?? null;
+                    }
+                } catch (Throwable $e) {}
+            }
+        }
+        if (empty($deletedBy)) {
+            $deletedBy = $_SESSION['user_email'] ?? $_SESSION['user_name'] ?? $_SESSION['username'] ?? 'Admin (System)';
+        }
+
+        // Resolve client IP
+        $ipAddress = $footprintMeta['ip'] ?? null;
+        if (empty($ipAddress)) {
+            $ipAddress = $_SERVER['HTTP_CF_CONNECTING_IP']
+                ?? $_SERVER['HTTP_X_FORWARDED_FOR']
+                ?? $_SERVER['REMOTE_ADDR']
+                ?? '127.0.0.1';
+            if (str_contains($ipAddress, ',')) {
+                $parts = explode(',', $ipAddress);
+                $ipAddress = trim($parts[0]);
+            }
+        }
+
+        // Resolve User Agent
+        $userAgent = $footprintMeta['user_agent'] ?? $_SERVER['HTTP_USER_AGENT'] ?? 'NetFusion System Core';
+
+        // Resolve Request URI & Method
+        $requestUri = $footprintMeta['request_uri'] ?? $_SERVER['REQUEST_URI'] ?? '/system';
+        $requestMethod = $footprintMeta['request_method'] ?? $_SERVER['REQUEST_METHOD'] ?? 'DELETE';
+
+        // 3. Store footprint in audit_deleted_records table
+        try {
+            $auditStmt = $pdo->prepare("INSERT INTO `audit_deleted_records` 
+                (`entity`, `record_id`, `record_data`, `deleted_by`, `ip_address`, `user_agent`, `request_uri`, `request_method`, `created_at`) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $auditStmt->execute([
+                $entity,
+                $recordId,
+                $recordJson,
+                $deletedBy,
+                $ipAddress,
+                $userAgent,
+                $requestUri,
+                $requestMethod,
+                date('Y-m-d H:i:s'),
+            ]);
+        } catch (Throwable $e) {
+            error_log("Failed to write audit footprint: " . $e->getMessage());
+        }
+
+        // 4. Perform the deletion from the entity table
+        $safeKey = preg_replace('/[^a-zA-Z0-9_]/', '', $key);
+        $delStmt = $pdo->prepare("DELETE FROM `{$table}` WHERE `{$safeKey}` = ?");
+        return $delStmt->execute([(string) $value]);
     }
 
     /**
-     * Save items to the entity JSON file.
+     * Retrieve audit deleted records footprint log.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function getAuditDeletedRecords(?string $entity = null, int $limit = 100): array
+    {
+        self::ensureTable('audit_deleted_records');
+        $pdo = self::getPdo();
+
+        if ($entity !== null && $entity !== '') {
+            $stmt = $pdo->prepare("SELECT * FROM `audit_deleted_records` WHERE `entity` = ? ORDER BY `id` DESC LIMIT ?");
+            $stmt->bindValue(1, $entity, PDO::PARAM_STR);
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM `audit_deleted_records` ORDER BY `id` DESC LIMIT ?");
+            $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+        }
+
+        $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($records as &$rec) {
+            $rec['parsed_data'] = json_decode((string) ($rec['record_data'] ?? '{}'), true) ?: [];
+        }
+        unset($rec);
+
+        return $records;
+    }
+
+    /**
+     * Restore a deleted record from the audit footprint back to its original table.
+     */
+    public static function restoreDeletedRecord(int $auditId): bool
+    {
+        self::ensureTable('audit_deleted_records');
+        $pdo = self::getPdo();
+
+        $stmt = $pdo->prepare("SELECT * FROM `audit_deleted_records` WHERE `id` = ? LIMIT 1");
+        $stmt->execute([$auditId]);
+        $audit = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$audit) {
+            return false;
+        }
+
+        $entity = $audit['entity'];
+        $data = json_decode((string) $audit['record_data'], true);
+        if (!is_array($data)) {
+            return false;
+        }
+
+        self::ensureTable($entity);
+        $table = self::resolveTableName($entity);
+
+        // Re-insert into original table
+        return self::insertDirect($table, $data);
+    }
+
+    /**
+     * Legacy save method for compatibility - synchronizes with MySQL.
+     * NOTE: Does NOT write to JSON files.
      *
      * @param array<int, array<string, mixed>> $items
      */
     public static function save(string $entity, array $items): bool
     {
-        $file = self::getFilePath($entity);
-        $dir = dirname($file);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        self::ensureTable($entity);
+        $table = self::resolveTableName($entity);
+
+        foreach ($items as $item) {
+            if (is_array($item) && isset($item['id'])) {
+                $existing = self::find($entity, 'id', $item['id']);
+                if ($existing) {
+                    self::update($entity, 'id', $item['id'], $item);
+                } else {
+                    self::insertDirect($table, $item);
+                }
+            }
         }
-        return file_put_contents(
-            $file,
-            json_encode($items, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        ) !== false;
+        return true;
+    }
+
+    /**
+     * Internal direct insert with column mapping.
+     */
+    protected static function insertDirect(string $table, array $record): bool
+    {
+        $pdo = self::getPdo();
+        $tableCols = self::getTableColumns($table);
+
+        $insertData = [];
+        foreach ($tableCols as $col) {
+            if (array_key_exists($col, $record)) {
+                $val = $record[$col];
+                $insertData[$col] = is_array($val) ? json_encode($val, JSON_UNESCAPED_UNICODE) : $val;
+            }
+        }
+
+        if (in_array('created_at', $tableCols, true) && !isset($insertData['created_at'])) {
+            $insertData['created_at'] = date('Y-m-d H:i:s');
+        }
+        if (in_array('updated_at', $tableCols, true) && !isset($insertData['updated_at'])) {
+            $insertData['updated_at'] = date('Y-m-d H:i:s');
+        }
+
+        if (empty($insertData['id']) && in_array('id', $tableCols, true)) {
+            $insertData['id'] = uniqid(substr($table, 0, 4) . '_');
+        }
+
+        $cols = array_keys($insertData);
+        $fieldsStr = implode('`, `', $cols);
+        $placeholders = implode(', ', array_fill(0, count($cols), '?'));
+        $sql = "INSERT INTO `{$table}` (`{$fieldsStr}`) VALUES ({$placeholders})";
+
+        try {
+            $stmt = $pdo->prepare($sql);
+            return $stmt->execute(array_values($insertData));
+        } catch (PDOException $e) {
+            // If duplicate key, try updating
+            if (isset($insertData['id'])) {
+                $id = $insertData['id'];
+                unset($insertData['id']);
+                $updateCols = [];
+                $updateVals = [];
+                foreach ($insertData as $k => $v) {
+                    $updateCols[] = "`{$k}` = ?";
+                    $updateVals[] = $v;
+                }
+                $updateVals[] = $id;
+                $updateSql = "UPDATE `{$table}` SET " . implode(', ', $updateCols) . " WHERE `id` = ?";
+                $stmt = $pdo->prepare($updateSql);
+                return $stmt->execute($updateVals);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Get table columns list.
+     *
+     * @return array<int, string>
+     */
+    protected static function getTableColumns(string $table): array
+    {
+        $pdo = self::getPdo();
+        $stmt = $pdo->query("DESCRIBE `{$table}`");
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /**
+     * Format row types (cast numeric strings back to float/int if needed).
+     */
+    protected static function formatRow(array &$row): void
+    {
+        foreach ($row as $key => $val) {
+            if (is_numeric($val) && in_array($key, ['amount', 'price', 'cost_price', 'selling_price', 'salary', 'value', 'debit_amount', 'credit_amount', 'total_amount'])) {
+                $row[$key] = (float) $val;
+            } elseif (is_numeric($val) && in_array($key, ['stock', 'items_count', 'users'])) {
+                $row[$key] = (int) $val;
+            }
+        }
+    }
+
+    /**
+     * Get explicit table schema SQL.
+     */
+    protected static function getTableSchema(string $table): ?string
+    {
+        return match ($table) {
+            'billing_invoices' => "CREATE TABLE IF NOT EXISTS `billing_invoices` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `customer` VARCHAR(255) NOT NULL,
+                `plan` VARCHAR(150) NOT NULL,
+                `cycle` VARCHAR(50) DEFAULT 'মাসিক',
+                `amount` DECIMAL(15,2) DEFAULT 0.00,
+                `method` VARCHAR(100) DEFAULT 'নগদ',
+                `issue_date` DATE NULL,
+                `due_date` DATE NULL,
+                `status` VARCHAR(50) DEFAULT 'pending',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'billing_plans' => "CREATE TABLE IF NOT EXISTS `billing_plans` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `name` VARCHAR(255) NOT NULL,
+                `price` DECIMAL(15,2) DEFAULT 0.00,
+                `interval` VARCHAR(50) DEFAULT 'মাসিক',
+                `users` VARCHAR(100) NULL,
+                `features` TEXT NULL,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'billing_subscriptions' => "CREATE TABLE IF NOT EXISTS `billing_subscriptions` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `customer` VARCHAR(255) NOT NULL,
+                `plan` VARCHAR(150) NOT NULL,
+                `start_date` DATE NULL,
+                `renewal_date` DATE NULL,
+                `auto_renew` VARCHAR(50) DEFAULT 'চালু (Yes)',
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'inventory_products' => "CREATE TABLE IF NOT EXISTS `inventory_products` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `sku` VARCHAR(100) NOT NULL,
+                `name` VARCHAR(255) NOT NULL,
+                `category` VARCHAR(150) NULL,
+                `unit` VARCHAR(50) DEFAULT 'পিস (Pcs)',
+                `cost_price` DECIMAL(15,2) DEFAULT 0.00,
+                `selling_price` DECIMAL(15,2) DEFAULT 0.00,
+                `stock` INT DEFAULT 0,
+                `warehouse` VARCHAR(150) NULL,
+                `status` VARCHAR(50) DEFAULT 'in_stock',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'inventory_warehouses' => "CREATE TABLE IF NOT EXISTS `inventory_warehouses` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `code` VARCHAR(50) NOT NULL,
+                `name` VARCHAR(255) NOT NULL,
+                `incharge` VARCHAR(150) NULL,
+                `location` TEXT NULL,
+                `capacity` VARCHAR(150) NULL,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'accounting_journal' => "CREATE TABLE IF NOT EXISTS `accounting_journal` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `voucher_no` VARCHAR(50) NOT NULL,
+                `date` DATE NULL,
+                `debit_account` VARCHAR(255) NOT NULL,
+                `credit_account` VARCHAR(255) NOT NULL,
+                `description` TEXT NULL,
+                `debit_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `credit_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `status` VARCHAR(50) DEFAULT 'posted',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'commerce_orders' => "CREATE TABLE IF NOT EXISTS `commerce_orders` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `order_code` VARCHAR(50) NOT NULL,
+                `customer` VARCHAR(255) NOT NULL,
+                `phone` VARCHAR(50) NULL,
+                `items_count` INT DEFAULT 1,
+                `total_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `gateway` VARCHAR(100) NULL,
+                `shipping_status` VARCHAR(50) DEFAULT 'pending',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'crm_leads' => "CREATE TABLE IF NOT EXISTS `crm_leads` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `name` VARCHAR(255) NOT NULL,
+                `company` VARCHAR(255) NULL,
+                `value` DECIMAL(15,2) DEFAULT 0.00,
+                `stage` VARCHAR(100) DEFAULT 'Lead',
+                `phone` VARCHAR(50) NULL,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'hrm_employees' => "CREATE TABLE IF NOT EXISTS `hrm_employees` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `name` VARCHAR(255) NOT NULL,
+                `department` VARCHAR(150) NOT NULL,
+                `designation` VARCHAR(150) NOT NULL,
+                `salary` DECIMAL(15,2) DEFAULT 0.00,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'tenants' => "CREATE TABLE IF NOT EXISTS `tenants` (
+                `id` VARCHAR(100) NOT NULL PRIMARY KEY,
+                `name` VARCHAR(255) NOT NULL,
+                `site_title` VARCHAR(255) NULL,
+                `description` TEXT NULL,
+                `domain` VARCHAR(255) NULL,
+                `driver` VARCHAR(50) DEFAULT 'database',
+                `status` VARCHAR(50) DEFAULT 'Active',
+                `users` INT DEFAULT 0,
+                `created_at` VARCHAR(50) NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'system_users' => "CREATE TABLE IF NOT EXISTS `system_users` (
+                `id` VARCHAR(100) NOT NULL PRIMARY KEY,
+                `name` VARCHAR(255) NOT NULL,
+                `email` VARCHAR(255) NOT NULL,
+                `role` VARCHAR(50) NOT NULL,
+                `tenant_id` VARCHAR(100) NULL,
+                `status` VARCHAR(50) DEFAULT 'Active',
+                `created_at` VARCHAR(50) NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'site_settings' => "CREATE TABLE IF NOT EXISTS `site_settings` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `key_name` VARCHAR(100) UNIQUE NOT NULL,
+                `value_data` LONGTEXT NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'modules_state' => "CREATE TABLE IF NOT EXISTS `modules_state` (
+                `module_name` VARCHAR(100) NOT NULL PRIMARY KEY,
+                `enabled` TINYINT(1) DEFAULT 1,
+                `state_payload` JSON NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            default => null,
+        };
     }
 
     /**
@@ -473,6 +985,88 @@ class ModuleDataRepository
                     'designation' => 'কিউএ লিড',
                     'salary' => 65000.00,
                     'status' => 'active',
+                ],
+            ],
+            'tenants' => [
+                [
+                    'id' => 'tenant_primary',
+                    'name' => 'DotNetBD Corporate HQ',
+                    'site_title' => 'DotNetBD Corporate Hub',
+                    'description' => 'Primary headquarters tenant for enterprise operations, financial consolidation, and executive governance.',
+                    'domain' => 'corporate.nff.dotnetbd.com',
+                    'driver' => 'database',
+                    'status' => 'Active',
+                    'users' => 24,
+                    'created_at' => '2026-01-10',
+                ],
+                [
+                    'id' => 'tenant_enterprise',
+                    'name' => 'Apex Enterprise Global',
+                    'site_title' => 'Apex Global Commerce Portal',
+                    'description' => 'Multinational supply-chain and global distribution channel for Apex Enterprise subsidiaries.',
+                    'domain' => 'apex.nff.dotnetbd.com',
+                    'driver' => 'column_scoped',
+                    'status' => 'Active',
+                    'users' => 86,
+                    'created_at' => '2026-02-15',
+                ],
+                [
+                    'id' => 'tenant_sandbox',
+                    'name' => 'SaaS Sandbox Org',
+                    'site_title' => 'SaaS Testing & Sandbox',
+                    'description' => 'Isolated staging environment for third-party integrations, webhook testing, and developer pilots.',
+                    'domain' => 'sandbox.nff.dotnetbd.com',
+                    'driver' => 'schema_scoped',
+                    'status' => 'Trial',
+                    'users' => 5,
+                    'created_at' => '2026-03-01',
+                ],
+            ],
+            'system_users', 'users' => [
+                [
+                    'id' => 'usr_001',
+                    'name' => 'Md. Atiquzzaman Ashish',
+                    'email' => 'ashish@dotnetbd.com',
+                    'role' => 'super_admin',
+                    'tenant_id' => 'tenant_primary',
+                    'status' => 'Active',
+                    'created_at' => '2026-01-01 10:00',
+                ],
+                [
+                    'id' => 'usr_002',
+                    'name' => 'Tanvir Rahman',
+                    'email' => 'tanvir@corporate.com',
+                    'role' => 'tenant_admin',
+                    'tenant_id' => 'tenant_primary',
+                    'status' => 'Active',
+                    'created_at' => '2026-01-12 11:30',
+                ],
+                [
+                    'id' => 'usr_003',
+                    'name' => 'Nusrat Jahan',
+                    'email' => 'nusrat@apex.com',
+                    'role' => 'manager',
+                    'tenant_id' => 'tenant_enterprise',
+                    'status' => 'Active',
+                    'created_at' => '2026-02-18 14:15',
+                ],
+                [
+                    'id' => 'usr_004',
+                    'name' => 'Kamal Hossain',
+                    'email' => 'kamal@corporate.com',
+                    'role' => 'staff',
+                    'tenant_id' => 'tenant_primary',
+                    'status' => 'Active',
+                    'created_at' => '2026-03-02 09:45',
+                ],
+                [
+                    'id' => 'usr_005',
+                    'name' => 'Rafiqul Islam',
+                    'email' => 'rafiq@client.com',
+                    'role' => 'client',
+                    'tenant_id' => 'tenant_sandbox',
+                    'status' => 'Active',
+                    'created_at' => '2026-03-10 16:20',
                 ],
             ],
             default => [],

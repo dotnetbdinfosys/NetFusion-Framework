@@ -29,6 +29,7 @@ $router->get('/hrm', [HrmDashboardController::class, 'index'])->name('hrm.dashbo
 $router->get('/hrm/employees', [HrmDashboardController::class, 'employees'])->name('hrm.employees');
 $router->get('/hrm/employees/edit', [HrmDashboardController::class, 'editEmployee'])->name('hrm.employees.edit');
 $router->post('/hrm/employees/update', [HrmDashboardController::class, 'updateEmployee'])->name('hrm.employees.update');
+$router->post('/hrm/employees/delete', [HrmDashboardController::class, 'deleteEmployee'])->name('hrm.employees.delete');
 $router->get('/hrm/departments', [HrmDashboardController::class, 'departments'])->name('hrm.departments');
 $router->get('/hrm/attendance', [HrmDashboardController::class, 'attendance'])->name('hrm.attendance');
 $router->get('/hrm/leave', [HrmDashboardController::class, 'leave'])->name('hrm.leave');

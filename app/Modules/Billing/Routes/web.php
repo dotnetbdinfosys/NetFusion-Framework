@@ -30,13 +30,16 @@ $router->get('/billing/invoices', [BillingController::class, 'invoices'])->name(
 $router->get('/billing/invoices/edit', [BillingController::class, 'editInvoice'])->name('billing.invoices.edit');
 $router->post('/billing/invoices/edit', [BillingController::class, 'updateInvoice']);
 $router->post('/billing/invoices/update', [BillingController::class, 'updateInvoice'])->name('billing.invoices.update');
+$router->post('/billing/invoices/delete', [BillingController::class, 'deleteInvoice'])->name('billing.invoices.delete');
 
 $router->get('/billing/subscriptions', [BillingController::class, 'subscriptions'])->name('billing.subscriptions');
 $router->post('/billing/subscriptions/update', [BillingController::class, 'updateSubscription'])->name('billing.subscriptions.update');
+$router->post('/billing/subscriptions/delete', [BillingController::class, 'deleteSubscription'])->name('billing.subscriptions.delete');
 
 $router->get('/billing/plans', [BillingController::class, 'plans'])->name('billing.plans');
 $router->get('/billing/plans/edit', [BillingController::class, 'editPlan'])->name('billing.plans.edit');
 $router->post('/billing/plans/update', [BillingController::class, 'updatePlan'])->name('billing.plans.update');
+$router->post('/billing/plans/delete', [BillingController::class, 'deletePlan'])->name('billing.plans.delete');
 
 $router->get('/billing/payments', [BillingController::class, 'payments'])->name('billing.payments');
 $router->get('/billing/overdue', [BillingController::class, 'overdue'])->name('billing.overdue');

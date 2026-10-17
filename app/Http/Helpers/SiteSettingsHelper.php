@@ -11,6 +11,7 @@ declare(strict_types=1);
 | Module    : Helpers
 | Namespace : NetFusion\App\Http\Helpers
 | Purpose   : Persistent Site Settings, Branding, Logo, Favicon, Header & Footer Customizer.
+|             Directly powered by MySQL Database table `site_settings`.
 |
 | Author    : Md. Atiquzzaman Ashish
 | Company   : DotNetBD
@@ -21,6 +22,10 @@ declare(strict_types=1);
 */
 
 namespace NetFusion\App\Http\Helpers;
+
+use NetFusion\App\Services\ModuleDataRepository;
+use PDO;
+use Throwable;
 
 class SiteSettingsHelper
 {
@@ -44,15 +49,7 @@ class SiteSettingsHelper
     ];
 
     /**
-     * Get settings file path.
-     */
-    public static function getStoragePath(): string
-    {
-        return storage_path('framework/site_settings.json');
-    }
-
-    /**
-     * Retrieve all current site settings.
+     * Retrieve all current site settings from MySQL database.
      */
     public static function get(): array
     {
@@ -60,13 +57,24 @@ class SiteSettingsHelper
             return self::$cachedSettings;
         }
 
-        $path = self::getStoragePath();
-        if (is_file($path)) {
-            $data = json_decode((string) file_get_contents($path), true);
-            if (is_array($data)) {
-                self::$cachedSettings = array_merge(self::$defaults, $data);
+        try {
+            $pdo = ModuleDataRepository::getPdo();
+            ModuleDataRepository::ensureTable('site_settings');
+
+            $stmt = $pdo->query("SELECT `key_name`, `value_data` FROM `site_settings`");
+            $rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+            if (!empty($rows)) {
+                $decoded = [];
+                foreach ($rows as $k => $v) {
+                    $json = json_decode((string)$v, true);
+                    $decoded[$k] = $json !== null ? $json : $v;
+                }
+                self::$cachedSettings = array_merge(self::$defaults, $decoded);
                 return self::$cachedSettings;
             }
+        } catch (Throwable $e) {
+            // fallback to defaults if db connection issue
         }
 
         self::$cachedSettings = self::$defaults;
@@ -74,23 +82,27 @@ class SiteSettingsHelper
     }
 
     /**
-     * Update and save site settings to persistent storage.
+     * Update and save site settings to MySQL database.
      */
     public static function save(array $newSettings): array
     {
         $current = self::get();
         $merged  = array_merge($current, $newSettings);
 
-        $path = self::getStoragePath();
-        $dir  = dirname($path);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
-        }
+        try {
+            $pdo = ModuleDataRepository::getPdo();
+            ModuleDataRepository::ensureTable('site_settings');
 
-        file_put_contents(
-            $path,
-            json_encode($merged, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
+            $stmt = $pdo->prepare("INSERT INTO `site_settings` (`key_name`, `value_data`, `updated_at`) 
+                VALUES (?, ?, NOW()) 
+                ON DUPLICATE KEY UPDATE `value_data` = VALUES(`value_data`), `updated_at` = NOW()");
+
+            foreach ($merged as $k => $v) {
+                $stmt->execute([$k, is_array($v) ? json_encode($v, JSON_UNESCAPED_UNICODE) : (string)$v]);
+            }
+        } catch (Throwable $e) {
+            error_log("Failed to save site_settings into MySQL: " . $e->getMessage());
+        }
 
         self::$cachedSettings = $merged;
         return $merged;

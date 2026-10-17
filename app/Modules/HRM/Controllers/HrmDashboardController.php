@@ -264,6 +264,7 @@ class HrmDashboardController
                     <div style="display:flex; gap:6px; align-items:center;">
                         <button type="button" class="btn btn-secondary" style="padding:4px 9px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick=\'openEditEmpModal(' . $jsonAttr . ')\'>✏️ এডিট</button>
                         <a href="/hrm/employees/edit?id=' . urlencode($code) . '" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" title="ফুল পেজ এডিট">📄</a>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#dc2626; border-color:#fecaca;" onclick="confirmDeleteRecord(\'hrm_employees\', \'' . $code . '\', \'/hrm/employees/delete\', \'' . htmlspecialchars($name, ENT_QUOTES) . ' (' . $code . ')\')">🗑️ মুছুন</button>
                     </div>
                 </td>
             </tr>';
@@ -739,5 +740,27 @@ class HrmDashboardController
         ';
 
         return Response::html(ModuleLayoutHelper::wrap('hrm', 'পারফরম্যান্স রিভিউ', $body, '', '', '/hrm/performance'));
+    }
+
+    /**
+     * Delete an employee and log audit footprint to MySQL
+     */
+    public function deleteEmployee(Request $request): Response
+    {
+        $id = trim((string) $request->input('id', ''));
+        if ($id === '') {
+            return Response::json(['success' => false, 'message' => 'কর্মকর্তা আইডি প্রদান করা আবশ্যক।'], 400);
+        }
+
+        $emp = ModuleDataRepository::find('hrm_employees', 'id', $id);
+        if (!$emp) {
+            return Response::json(['success' => false, 'message' => 'কর্মকর্তা পাওয়া যায়নি।'], 404);
+        }
+
+        $deleted = ModuleDataRepository::delete('hrm_employees', 'id', $id);
+        if ($deleted) {
+            return Response::json(['success' => true, 'message' => "কর্মকর্তা {$emp['name']} ({$id}) সফলভাবে মুছে ফেলা হয়েছে এবং অডিট টেবিলে ফুটপ্রিন্ট সংরক্ষিত হয়েছে।"]);
+        }
+        return Response::json(['success' => false, 'message' => 'কর্মকর্তা মুছতে ব্যর্থ হয়েছে।'], 500);
     }
 }
