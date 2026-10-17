@@ -101,7 +101,7 @@ class ModuleDataRepository
 
         $pdo = self::getPdo();
 
-        // Ensure audit table exists first
+        // Ensure audit table exists first with precise time, day, hour, min, sec tracking
         if (!isset(self::$verifiedTables['audit_deleted_records'])) {
             $pdo->exec("CREATE TABLE IF NOT EXISTS `audit_deleted_records` (
                 `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -113,12 +113,56 @@ class ModuleDataRepository
                 `user_agent` TEXT NULL COMMENT 'Client User Agent',
                 `request_uri` TEXT NULL COMMENT 'Endpoint URL',
                 `request_method` VARCHAR(10) NULL COMMENT 'HTTP Method',
+                `deleted_day` VARCHAR(40) NULL COMMENT 'Day of the week e.g. শনিবার (Saturday)',
+                `deleted_time` VARCHAR(60) NULL COMMENT 'Exact time with 12h/24h and seconds e.g. 11:15:30 PM [BST]',
+                `deleted_at_readable` VARCHAR(160) NULL COMMENT 'Human readable Bengali date and time',
                 `created_at` DATETIME NOT NULL COMMENT 'Timestamp of deletion',
                 INDEX `idx_entity` (`entity`),
                 INDEX `idx_record_id` (`record_id`),
                 INDEX `idx_created_at` (`created_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // Safe migration for existing installations
+            try {
+                $cols = $pdo->query("SHOW COLUMNS FROM `audit_deleted_records`")->fetchAll(PDO::FETCH_COLUMN);
+                if (!in_array('deleted_day', $cols, true)) {
+                    $pdo->exec("ALTER TABLE `audit_deleted_records` ADD COLUMN `deleted_day` VARCHAR(40) NULL AFTER `request_method`");
+                }
+                if (!in_array('deleted_time', $cols, true)) {
+                    $pdo->exec("ALTER TABLE `audit_deleted_records` ADD COLUMN `deleted_time` VARCHAR(60) NULL AFTER `deleted_day`");
+                }
+                if (!in_array('deleted_at_readable', $cols, true)) {
+                    $pdo->exec("ALTER TABLE `audit_deleted_records` ADD COLUMN `deleted_at_readable` VARCHAR(160) NULL AFTER `deleted_time`");
+                }
+            } catch (Throwable $e) {}
+
+            // Ensure cold archive table exists
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `audit_deleted_records_cold_archive` (
+                `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+                `original_audit_id` BIGINT NOT NULL,
+                `entity` VARCHAR(100) NOT NULL,
+                `record_id` VARCHAR(100) NOT NULL,
+                `record_data` LONGTEXT NOT NULL COMMENT 'JSON snapshot of deleted record',
+                `deleted_by` VARCHAR(150) NULL,
+                `ip_address` VARCHAR(50) NULL,
+                `user_agent` TEXT NULL,
+                `request_uri` TEXT NULL,
+                `request_method` VARCHAR(10) NULL,
+                `deleted_day` VARCHAR(40) NULL,
+                `deleted_time` VARCHAR(60) NULL,
+                `deleted_at_readable` VARCHAR(160) NULL,
+                `created_at` DATETIME NOT NULL COMMENT 'Original deletion timestamp',
+                `archived_at` DATETIME NOT NULL COMMENT 'Archive timestamp',
+                `archived_by` VARCHAR(100) DEFAULT 'system_cron_scheduler',
+                `retention_days` INT DEFAULT 180,
+                INDEX `idx_cold_entity` (`entity`),
+                INDEX `idx_cold_record_id` (`record_id`),
+                INDEX `idx_cold_created_at` (`created_at`),
+                INDEX `idx_cold_archived_at` (`archived_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
             self::$verifiedTables['audit_deleted_records'] = true;
+            self::$verifiedTables['audit_deleted_records_cold_archive'] = true;
         }
 
         $schema = self::getTableSchema($table);
@@ -321,11 +365,36 @@ class ModuleDataRepository
         $requestUri = $footprintMeta['request_uri'] ?? $_SERVER['REQUEST_URI'] ?? '/system';
         $requestMethod = $footprintMeta['request_method'] ?? $_SERVER['REQUEST_METHOD'] ?? 'DELETE';
 
-        // 3. Store footprint in audit_deleted_records table
+        // 3. Compute precise audit time metadata (Day, Date, Hour, Min, Sec in BST and ISO)
+        $dt = new \DateTimeImmutable('now', new \DateTimeZone('Asia/Dhaka'));
+        $createdAtIso = $dt->format('Y-m-d H:i:s');
+        $dayEn = $dt->format('l');
+        $daysBn = [
+            'Sunday' => 'রবিবার', 'Monday' => 'সোমবার', 'Tuesday' => 'মঙ্গলবার',
+            'Wednesday' => 'বুধবার', 'Thursday' => 'বৃহস্পতিবার', 'Friday' => 'শুক্রবার',
+            'Saturday' => 'শনিবার'
+        ];
+        $dayBn = $daysBn[$dayEn] ?? $dayEn;
+        $deletedDay = "{$dayBn} ({$dayEn})";
+
+        $time12 = $dt->format('h:i:s A');
+        $time24 = $dt->format('H:i:s');
+        $deletedTime = "{$time12} [BST / {$time24}]";
+
+        $monthsBn = [
+            'January' => 'জানুয়ারি', 'February' => 'ফেব্রুয়ারি', 'March' => 'মার্চ',
+            'April' => 'এপ্রিল', 'May' => 'মে', 'June' => 'জুন',
+            'July' => 'জুলাই', 'August' => 'আগস্ট', 'September' => 'সেপ্টেম্বর',
+            'October' => 'অক্টোবর', 'November' => 'নভেম্বর', 'December' => 'ডিসেম্বর'
+        ];
+        $monthBn = $monthsBn[$dt->format('F')] ?? $dt->format('F');
+        $deletedAtReadable = "{$dayBn}, {$dt->format('d')} {$monthBn} {$dt->format('Y')} — {$time12} (BST / GMT+6)";
+
+        // 4. Store footprint in audit_deleted_records table
         try {
             $auditStmt = $pdo->prepare("INSERT INTO `audit_deleted_records` 
-                (`entity`, `record_id`, `record_data`, `deleted_by`, `ip_address`, `user_agent`, `request_uri`, `request_method`, `created_at`) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                (`entity`, `record_id`, `record_data`, `deleted_by`, `ip_address`, `user_agent`, `request_uri`, `request_method`, `deleted_day`, `deleted_time`, `deleted_at_readable`, `created_at`) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $auditStmt->execute([
                 $entity,
                 $recordId,
@@ -335,13 +404,16 @@ class ModuleDataRepository
                 $userAgent,
                 $requestUri,
                 $requestMethod,
-                date('Y-m-d H:i:s'),
+                $deletedDay,
+                $deletedTime,
+                $deletedAtReadable,
+                $createdAtIso,
             ]);
         } catch (Throwable $e) {
             error_log("Failed to write audit footprint: " . $e->getMessage());
         }
 
-        // 4. Perform the deletion from the entity table
+        // 5. Perform the deletion from the entity table
         $safeKey = preg_replace('/[^a-zA-Z0-9_]/', '', $key);
         $delStmt = $pdo->prepare("DELETE FROM `{$table}` WHERE `{$safeKey}` = ?");
         return $delStmt->execute([(string) $value]);
@@ -379,9 +451,16 @@ class ModuleDataRepository
 
     /**
      * Restore a deleted record from the audit footprint back to its original table.
+     * SECURITY POLICY: Strictly restricted to 'super_admin'. Other roles are blocked.
      */
-    public static function restoreDeletedRecord(int $auditId): bool
+    public static function restoreDeletedRecord(int $auditId, string $operatorRole = 'super_admin'): bool
     {
+        // Strict RBAC Enforcement
+        if (strtolower(trim($operatorRole)) !== 'super_admin') {
+            error_log("SECURITY AUDIT: Unauthorized restore attempt blocked for audit #{$auditId} by non-super_admin role: {$operatorRole}");
+            return false;
+        }
+
         self::ensureTable('audit_deleted_records');
         $pdo = self::getPdo();
 
@@ -404,6 +483,147 @@ class ModuleDataRepository
 
         // Re-insert into original table
         return self::insertDirect($table, $data);
+    }
+
+    /**
+     * Purge or delete audit footprint records.
+     * SECURITY POLICY: Strictly restricted to 'super_admin'. Blocked for everyone else.
+     *
+     * @param int|array<int>|null $ids Null to purge all, or specific ID(s)
+     */
+    public static function purgeAuditRecords(int|array|null $ids = null, string $operatorRole = ''): bool
+    {
+        if (strtolower(trim($operatorRole)) !== 'super_admin') {
+            error_log("SECURITY AUDIT: Unauthorized audit purge attempt blocked for role: {$operatorRole}");
+            return false;
+        }
+
+        self::ensureTable('audit_deleted_records');
+        $pdo = self::getPdo();
+
+        if ($ids === null) {
+            return $pdo->exec("TRUNCATE TABLE `audit_deleted_records`") !== false;
+        }
+
+        if (is_int($ids)) {
+            $stmt = $pdo->prepare("DELETE FROM `audit_deleted_records` WHERE `id` = ?");
+            return $stmt->execute([$ids]);
+        }
+
+        if (is_array($ids) && !empty($ids)) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $pdo->prepare("DELETE FROM `audit_deleted_records` WHERE `id` IN ({$placeholders})");
+            return $stmt->execute(array_values($ids));
+        }
+
+        return false;
+    }
+
+    /**
+     * Cold Archive Policy: Move old audit logs (e.g. older than 180 days) from hot table to cold storage.
+     *
+     * @return array{success: bool, archived_count: int, threshold_date: string, archived_by: string, message: string}
+     */
+    public static function archiveColdAuditRecords(int $daysThreshold = 180, string $operator = 'system_cron_scheduler'): array
+    {
+        self::ensureTable('audit_deleted_records');
+        $pdo = self::getPdo();
+
+        $thresholdDt = new \DateTimeImmutable("-{$daysThreshold} days", new \DateTimeZone('Asia/Dhaka'));
+        $threshold = $thresholdDt->format('Y-m-d H:i:s');
+
+        try {
+            $pdo->beginTransaction();
+
+            // Select candidate records older than threshold
+            $stmt = $pdo->prepare("SELECT * FROM `audit_deleted_records` WHERE `created_at` <= ? FOR UPDATE");
+            $stmt->execute([$threshold]);
+            $candidates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $archivedCount = count($candidates);
+
+            if ($archivedCount > 0) {
+                $insStmt = $pdo->prepare("INSERT INTO `audit_deleted_records_cold_archive` 
+                    (`original_audit_id`, `entity`, `record_id`, `record_data`, `deleted_by`, `ip_address`, `user_agent`, `request_uri`, `request_method`, `deleted_day`, `deleted_time`, `deleted_at_readable`, `created_at`, `archived_at`, `archived_by`, `retention_days`) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)");
+
+                foreach ($candidates as $row) {
+                    $insStmt->execute([
+                        $row['id'],
+                        $row['entity'],
+                        $row['record_id'],
+                        $row['record_data'],
+                        $row['deleted_by'] ?? null,
+                        $row['ip_address'] ?? null,
+                        $row['user_agent'] ?? null,
+                        $row['request_uri'] ?? null,
+                        $row['request_method'] ?? null,
+                        $row['deleted_day'] ?? null,
+                        $row['deleted_time'] ?? null,
+                        $row['deleted_at_readable'] ?? null,
+                        $row['created_at'],
+                        $operator,
+                        $daysThreshold,
+                    ]);
+                }
+
+                // Delete archived records from active audit table
+                $delStmt = $pdo->prepare("DELETE FROM `audit_deleted_records` WHERE `created_at` <= ?");
+                $delStmt->execute([$threshold]);
+            }
+
+            $pdo->commit();
+
+            return [
+                'success'        => true,
+                'archived_count' => $archivedCount,
+                'threshold_date' => $threshold,
+                'archived_by'    => $operator,
+                'message'        => "{$archivedCount} টি পুরনো অডিট লগ সফলভাবে কোল্ড আর্কাইভে স্থানান্তরিত হয়েছে (সীমা: {$daysThreshold} দিন)।",
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log("Cold Archive Error: " . $e->getMessage());
+            return [
+                'success'        => false,
+                'archived_count' => 0,
+                'threshold_date' => $threshold,
+                'archived_by'    => $operator,
+                'message'        => "কোল্ড আর্কাইভ প্রক্রিয়াকরণে ত্রুটি: " . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Retrieve cold archived audit logs.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function getColdArchivedRecords(?string $entity = null, int $limit = 50): array
+    {
+        self::ensureTable('audit_deleted_records');
+        $pdo = self::getPdo();
+
+        if ($entity !== null && $entity !== '') {
+            $stmt = $pdo->prepare("SELECT * FROM `audit_deleted_records_cold_archive` WHERE `entity` = ? ORDER BY `id` DESC LIMIT ?");
+            $stmt->bindValue(1, $entity, PDO::PARAM_STR);
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM `audit_deleted_records_cold_archive` ORDER BY `id` DESC LIMIT ?");
+            $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+        }
+
+        $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($records as &$rec) {
+            $rec['parsed_data'] = json_decode((string) ($rec['record_data'] ?? '{}'), true) ?: [];
+        }
+        unset($rec);
+
+        return $records;
     }
 
     /**

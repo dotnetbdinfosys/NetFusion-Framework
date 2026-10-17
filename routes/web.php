@@ -167,6 +167,9 @@ $router->group(['prefix' => 'admin', 'name' => 'admin.'], function (Router $r) {
     $r->get('/audit/deleted', function () {
         return \NetFusion\Core\Http\Response::redirect('/system/audit/deleted');
     });
+    $r->get('/audit/cold-archive', function () {
+        return \NetFusion\Core\Http\Response::redirect('/system/audit/cold-archive');
+    });
     $r->post('/modules/toggle', [\NetFusion\App\Http\Controllers\DashboardController::class, 'toggleModule'])->name('modules.toggle');
     $r->post('/tenants/switch', [\NetFusion\App\Http\Controllers\DashboardController::class, 'switchTenant'])->name('tenants.switch');
     $r->post('/tenants/create', [\NetFusion\App\Http\Controllers\DashboardController::class, 'createTenant'])->name('tenants.create');

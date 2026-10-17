@@ -137,6 +137,7 @@ class ModuleLayoutHelper
                 ['icon' => '📤', 'label_en' => 'Upload Module/Ext', 'label_bn' => 'মডিউল/এক্সটেনশন আপলোড', 'url' => '/system/modules/upload'],
                 ['icon' => '🩺', 'label_en' => 'System Health', 'label_bn' => 'সিস্টেম হেলথ', 'url' => '/health'],
                 ['icon' => '🐾', 'label_en' => 'Audit & Deleted Footprints', 'label_bn' => 'অডিট ও ডিলিট ফুটপ্রিন্ট', 'url' => '/system/audit/deleted'],
+                ['icon' => '❄️', 'label_en' => 'Cold Audit Archive', 'label_bn' => 'কোল্ড অডিট আর্কাইভ', 'url' => '/system/audit/cold-archive'],
             ],
         ],
     ];

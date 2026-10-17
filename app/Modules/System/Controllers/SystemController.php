@@ -24,6 +24,7 @@ namespace NetFusion\Modules\System\Controllers;
 
 use NetFusion\Core\Http\Request;
 use NetFusion\Core\Http\Response;
+use NetFusion\App\Http\Helpers\AuthHelper;
 use NetFusion\App\Http\Helpers\ModuleLayoutHelper;
 use NetFusion\App\Http\Helpers\SiteSettingsHelper;
 use NetFusion\App\Services\ModuleDataRepository;
@@ -1094,23 +1095,36 @@ CONTROLLER;
     }
 
     /**
-     * Deleted Records Footprint Audit Interface
+     * Deleted Records Footprint Audit Interface with Granular Time & RBAC Protection.
      */
     public function auditDeleted(Request $request): Response
     {
+        $currentRole = AuthHelper::getCurrentRole($request);
+        $isSuperAdmin = AuthHelper::isSuperAdmin($request);
+        $roleLabelBn = AuthHelper::getRoleLabelBn($currentRole);
+
         $entityFilter = trim((string) $request->input('entity', ''));
         $logs = ModuleDataRepository::getAuditDeletedRecords($entityFilter ?: null, 100);
 
         $totalCount = count($logs);
-        $lastDeletedTime = !empty($logs) ? $logs[0]['created_at'] : 'কোনো ডাটা মোছা হয়নি';
+        $lastDeletedTime = !empty($logs) ? ($logs[0]['deleted_at_readable'] ?? $logs[0]['created_at']) : 'কোনো ডাটা মোছা হয়নি';
 
         $kpis = '
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:20px;">
             ' . ModuleLayoutHelper::kpiCard('মোট মোছা রেকর্ড (Deleted Records)', (string)$totalCount, 'অডিট ফুটপ্রিন্ট লগ সংগৃহীত', '#dc2626') . '
-            ' . ModuleLayoutHelper::kpiCard('ডাটাবেজ ইঞ্জিন', 'MySQL 8.4', 'InnoDB Relational Engine', '#2563eb') . '
-            ' . ModuleLayoutHelper::kpiCard('অডিট ট্র্যাকিং স্ট্যাটাস', 'সক্রিয় (Active)', 'audit_deleted_records টেবিল', '#059669') . '
-            ' . ModuleLayoutHelper::kpiCard('সর্বশেষ মোছার সময়', $lastDeletedTime, 'বাংলাদেশ সময়', '#d97706') . '
+            ' . ModuleLayoutHelper::kpiCard('ডাটাবেজ ইঞ্জিন', 'MySQL 8.4 (InnoDB)', 'JSON-Free Direct MySQL', '#2563eb') . '
+            ' . ModuleLayoutHelper::kpiCard('অডিট নিরাপত্তা পলিসি', $isSuperAdmin ? 'সুপার অ্যাডমিন মোড (Full)' : 'ভিউ অনলি মোড (View Only)', 'audit_deleted_records', $isSuperAdmin ? '#059669' : '#d97706') . '
+            ' . ModuleLayoutHelper::kpiCard('কোল্ড আর্কাইভ পলিসি', '১৮০ দিন (Cold Storage)', 'audit_cold_archive টেবিল', '#7c3aed') . '
         </div>';
+
+        // Role indicator banner
+        $roleBanner = $isSuperAdmin
+            ? '<span style="display:inline-flex; align-items:center; gap:6px; background:#ecfdf5; border:1px solid #6ee7b7; color:#065f46; padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600;">👑 বর্তমান ইউজার: ' . $roleLabelBn . ' &bull; <span style="color:#047857;">[ডাটা পুনরুদ্ধার ও কোল্ড আর্কাইভের সম্পূর্ণ পারমিশন সক্রিয়]</span></span>'
+            : '<span style="display:inline-flex; align-items:center; gap:6px; background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600;">👁️ বর্তমান ইউজার: ' . $roleLabelBn . ' &bull; <span style="color:#b45309;">[শুধুমাত্র দেখার অনুমতি &bull; ডাটা পুনরুদ্ধার ও মোছা সুরক্ষিতভাবে ব্লকড]</span></span>';
+
+        $superActiveStyle = ($currentRole === 'super_admin') ? 'background:#2563eb; color:#ffffff; font-weight:600;' : 'background:#e2e8f0; color:#475569;';
+        $managerActiveStyle = ($currentRole === 'manager') ? 'background:#d97706; color:#ffffff; font-weight:600;' : 'background:#e2e8f0; color:#475569;';
+        $staffActiveStyle = ($currentRole === 'staff') ? 'background:#475569; color:#ffffff; font-weight:600;' : 'background:#e2e8f0; color:#475569;';
 
         $entityOptions = [
             '' => 'সকল মডিউল ও টেবিল (All Entities)',
@@ -1127,7 +1141,7 @@ CONTROLLER;
             'users' => 'ব্যবহারকারী (system_users)',
         ];
 
-        $filterSelect = '<select class="form-control" style="width:auto; min-width:240px; display:inline-block;" onchange="location.href=\'/system/audit/deleted?entity=\' + encodeURIComponent(this.value)">';
+        $filterSelect = '<select class="form-control" style="width:auto; min-width:240px; display:inline-block;" onchange="location.href=\'/system/audit/deleted?entity=\' + encodeURIComponent(this.value) + \'&as_role=' . urlencode($currentRole) . '\'">';
         foreach ($entityOptions as $key => $lbl) {
             $sel = ($entityFilter === $key) ? 'selected' : '';
             $filterSelect .= "<option value=\"{$key}\" {$sel}>{$lbl}</option>";
@@ -1136,7 +1150,7 @@ CONTROLLER;
 
         $rowsHtml = '';
         if (empty($logs)) {
-            $rowsHtml = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#64748b;">✅ অডিট টেবিলে কোনো মোছা রেকর্ডের হিস্টোরি নেই। ফ্রেমওয়ার্কের সমস্ত ডাটা সুরক্ষিত রয়েছে।</td></tr>';
+            $rowsHtml = '<tr><td colspan="8" style="text-align:center; padding:35px; color:#64748b; font-size:14px;">✅ অডিট টেবিলে কোনো মোছা রেকর্ডের হিস্টোরি নেই। ফ্রেমওয়ার্কের সমস্ত ডাটা সুরক্ষিত রয়েছে।</td></tr>';
         } else {
             foreach ($logs as $row) {
                 $auditId = (int) $row['id'];
@@ -1149,6 +1163,19 @@ CONTROLLER;
                 $reqUri = htmlspecialchars($row['request_uri'] ?? '');
                 $rawJson = htmlspecialchars($row['record_data'] ?? '{}', ENT_QUOTES, 'UTF-8');
 
+                // Precise Day & Time resolution
+                $deletedDay = htmlspecialchars($row['deleted_day'] ?? '');
+                $deletedTime = htmlspecialchars($row['deleted_time'] ?? '');
+                $readableTime = htmlspecialchars($row['deleted_at_readable'] ?? '');
+
+                if (empty($deletedDay) && !empty($createdAt)) {
+                    $ts = strtotime($createdAt);
+                    $dayEn = date('l', $ts);
+                    $daysMap = ['Sunday' => 'রবিবার', 'Monday' => 'সোমবার', 'Tuesday' => 'মঙ্গলবার', 'Wednesday' => 'বুধবার', 'Thursday' => 'বৃহস্পতিবার', 'Friday' => 'শুক্রবার', 'Saturday' => 'শনিবার'];
+                    $deletedDay = ($daysMap[$dayEn] ?? $dayEn) . " ({$dayEn})";
+                    $deletedTime = date('h:i:s A', $ts) . ' [BST / ' . date('H:i:s', $ts) . ']';
+                }
+
                 $entityBadge = match ($entity) {
                     'billing_invoices', 'billing_plans', 'billing_subscriptions' => ModuleLayoutHelper::badge($entity, 'info'),
                     'inventory_products', 'inventory_warehouses' => ModuleLayoutHelper::badge($entity, 'warning'),
@@ -1159,6 +1186,13 @@ CONTROLLER;
                     default => ModuleLayoutHelper::badge($entity, 'secondary'),
                 };
 
+                // Action Column: Super Admin gets instant restore, others get read-only lock badge
+                if ($isSuperAdmin) {
+                    $actionHtml = '<button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px; color:#065f46; border-color:#a7f3d0; background:#ecfdf5; font-weight:600;" onclick="restoreDeletedRecord(' . $auditId . ', \'' . $recordId . '\')">🔄 পুনরুদ্ধার</button>';
+                } else {
+                    $actionHtml = '<span class="badge" style="background:#f1f5f9; color:#64748b; font-size:11px; padding:4px 8px; border:1px solid #cbd5e1;" title="শুধুমাত্র Super Admin মোছা ডাটা পুনরুদ্ধার করতে পারেন">🔒 ভিউ অনলি</span>';
+                }
+
                 $rowsHtml .= '
                 <tr id="audit-row-' . $auditId . '">
                     <td><code>#' . $auditId . '</code></td>
@@ -1167,29 +1201,62 @@ CONTROLLER;
                     <td><span style="font-weight:600; color:#1e293b;">👤 ' . $deletedBy . '</span></td>
                     <td>
                         <span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:11.5px;">🌐 ' . $ipAddress . '</span>
-                        <div style="font-size:11px; color:#64748b; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' . $userAgent . '">' . $userAgent . '</div>
-                    </td>
-                    <td style="font-size:12px; color:#475569;">🕒 ' . $createdAt . '<br><small style="color:#94a3b8;">' . $reqUri . '</small></td>
-                    <td>
-                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick=\'viewSnapshot(' . $rawJson . ', "' . $recordId . '", "' . $entity . '")\'>👁️ স্ন্যাপশট</button>
+                        <div style="font-size:11px; color:#64748b; max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' . $userAgent . '">' . $userAgent . '</div>
                     </td>
                     <td>
-                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:#065f46; border-color:#a7f3d0;" onclick="restoreDeletedRecord(' . $auditId . ', \'' . $recordId . '\')">🔄 রিস্টোর</button>
+                        <div style="font-weight:600; color:#0f172a; font-size:12px;">📅 ' . $deletedDay . '</div>
+                        <div style="color:#2563eb; font-weight:600; font-size:11.5px; margin-top:2px;">🕒 ' . $deletedTime . '</div>
+                        <div style="color:#64748b; font-size:11px; margin-top:1px;">' . $createdAt . '</div>
+                        <div style="color:#94a3b8; font-size:10px; max-width:160px; overflow:hidden; text-overflow:ellipsis;" title="' . $reqUri . '">URI: ' . $reqUri . '</div>
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick=\'viewSnapshot(' . $rawJson . ', "' . $recordId . '", "' . $entity . '", "' . addslashes($readableTime ?: $createdAt) . '")\'>👁️ স্ন্যাপশট</button>
+                    </td>
+                    <td>
+                        ' . $actionHtml . '
                     </td>
                 </tr>';
             }
         }
 
+        // Action Toolbar
+        $adminTools = '';
+        if ($isSuperAdmin) {
+            $adminTools = '
+            <button type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:12px; background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; font-weight:600;" onclick="triggerColdArchive(180)">
+                ❄️ ১৮০+ দিনের পুরনো লগ কোল্ড আর্কাইভে পাঠান
+            </button>
+            <a href="/system/audit/cold-archive?as_role=' . urlencode($currentRole) . '" class="btn btn-secondary" style="padding:6px 12px; font-size:12px; background:#f8fafc; border-color:#cbd5e1; color:#334155;">
+                📂 কোল্ড আর্কাইভ ভিউয়ার
+            </a>';
+        } else {
+            $adminTools = '
+            <a href="/system/audit/cold-archive?as_role=' . urlencode($currentRole) . '" class="btn btn-secondary" style="padding:6px 12px; font-size:12px; background:#f8fafc; border-color:#cbd5e1; color:#334155;">
+                📂 কোল্ড আর্কাইভ ভিউয়ার
+            </a>';
+        }
+
         $body = '
         ' . $kpis . '
 
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
-            <div>
-                <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">🐾 মোছা ডাটা ফুটপ্রিন্ট ও অডিট ট্র্যাকিং (Deleted Data Footprints)</h2>
-                <p style="margin:0; font-size:13px; color:#64748b;">সকল মডিউল থেকে কোনো ডাটা মুছে ফেলা হলে ইউজারের সম্পূর্ণ ফুটপ্রিন্ট ও মূল তথ্যের স্ন্যাপশট</p>
+        <!-- Role & Permission Control Bar -->
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px; margin-bottom:20px; flex-wrap:wrap; gap:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div>' . $roleBanner . '</div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:12px; font-weight:600; color:#64748b;">পারমিশন টেস্ট Persona:</span>
+                <a href="?as_role=super_admin" class="btn btn-sm" style="padding:4px 9px; font-size:11px; ' . $superActiveStyle . '">👑 Super Admin</a>
+                <a href="?as_role=manager" class="btn btn-sm" style="padding:4px 9px; font-size:11px; ' . $managerActiveStyle . '">👨‍💼 Manager (View Only)</a>
+                <a href="?as_role=staff" class="btn btn-sm" style="padding:4px 9px; font-size:11px; ' . $staffActiveStyle . '">👔 Staff (View Only)</a>
             </div>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <label style="font-weight:600; font-size:13px; color:#475569;">মডিউল ফিল্টার:</label>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700; color:#0f172a;">🐾 মোছা ডাটা ফুটপ্রিন্ট ও অডিট ট্র্যাকিং (Deleted Data Footprints)</h2>
+                <p style="margin:0; font-size:13px; color:#64748b;">ইউজারের পরিচয়, আইপি অ্যাড্রেস, দিন-তারিখ-সময় (সেকেন্ডসহ) ও ডাটার পূর্ণাঙ্গ স্ন্যাপশট</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                ' . $adminTools . '
                 ' . $filterSelect . '
             </div>
         </div>
@@ -1203,8 +1270,8 @@ CONTROLLER;
                             <th>মডিউল / টেবিল</th>
                             <th>রেকর্ড ID</th>
                             <th>কে মুছেছে (Deleted By)</th>
-                            <th>আইপি ও ব্রাউজার (Footprint)</th>
-                            <th>তারিখ ও সময়</th>
+                            <th>আইপি ও ব্রাউজার</th>
+                            <th>দিন, তারিখ ও সময় (ঘণ্টা:মিনিট:সেকেন্ড)</th>
                             <th>ডাটা স্ন্যাপশট</th>
                             <th>অ্যাকশন</th>
                         </tr>
@@ -1218,10 +1285,13 @@ CONTROLLER;
 
         <!-- Snapshot Viewer Modal -->
         <div id="snapshotModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(3px);">
-            <div style="background:#ffffff; border-radius:12px; width:100%; max-width:650px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1); padding:24px;">
+            <div style="background:#ffffff; border-radius:12px; width:100%; max-width:680px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1); padding:24px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
-                    <h3 id="snapshotModalTitle" style="margin:0; font-size:17px; font-weight:700; color:#1e293b;">📋 ডাটা ফুটপ্রিন্ট স্ন্যাপশট</h3>
-                    <button type="button" onclick="closeSnapshotModal()" style="border:none; background:none; font-size:20px; cursor:pointer; color:#94a3b8;">&times;</button>
+                    <div>
+                        <h3 id="snapshotModalTitle" style="margin:0 0 2px 0; font-size:16px; font-weight:700; color:#1e293b;">📋 ডাটা ফুটপ্রিন্ট স্ন্যাপশট</h3>
+                        <div id="snapshotModalSubtitle" style="font-size:11.5px; color:#64748b;"></div>
+                    </div>
+                    <button type="button" onclick="closeSnapshotModal()" style="border:none; background:none; font-size:22px; cursor:pointer; color:#94a3b8;">&times;</button>
                 </div>
                 <div id="snapshotContent" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; font-family:monospace; font-size:12.5px; white-space:pre-wrap; max-height:400px; overflow-y:auto; color:#0f172a;"></div>
                 <div style="display:flex; justify-content:flex-end; margin-top:20px;">
@@ -1231,8 +1301,11 @@ CONTROLLER;
         </div>
 
         <script>
-        function viewSnapshot(data, recordId, entity) {
-            document.getElementById("snapshotModalTitle").innerText = "📋 " + entity + " (" + recordId + ") — মোছার পূর্ববর্তী সম্পূর্ণ ডাটা";
+        const CURRENT_USER_ROLE = "' . $currentRole . '";
+
+        function viewSnapshot(data, recordId, entity, timeText) {
+            document.getElementById("snapshotModalTitle").innerText = "📋 " + entity + " (#" + recordId + ") — মোছার পূর্ববর্তী সম্পূর্ণ ডাটা";
+            document.getElementById("snapshotModalSubtitle").innerText = "🕒 মোছার সময়: " + (timeText || "N/A");
             document.getElementById("snapshotContent").innerText = JSON.stringify(data, null, 4);
             document.getElementById("snapshotModal").style.display = "flex";
         }
@@ -1240,15 +1313,25 @@ CONTROLLER;
             document.getElementById("snapshotModal").style.display = "none";
         }
         function restoreDeletedRecord(auditId, recordId) {
-            if (!confirm("⚠️ আপনি কি নিশ্চিতভাবে এই রেকর্ডটি (#" + recordId + ") পুনরায় মূল ডেটাবেজ টেবিলে ফিরিয়ে আনতে চান?")) {
+            if (CURRENT_USER_ROLE !== "super_admin") {
+                alert("❌ অনুমতি অস্বীকৃত: শুধুমাত্র Super Admin মোছা ডাটা পুনরুদ্ধার করতে পারেন।");
+                return;
+            }
+
+            if (!confirm("⚠️ আপনি কি নিশ্চিতভাবে এই রেকর্ডটি (#" + recordId + ") পুনরায় মূল MySQL টেবিলে ফিরিয়ে আনতে চান?")) {
                 return;
             }
             const formData = new FormData();
             formData.append("audit_id", auditId);
+            formData.append("user_role", CURRENT_USER_ROLE);
 
             fetch("/system/audit/restore", {
                 method: "POST",
-                headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+                headers: { 
+                    "X-Requested-With": "XMLHttpRequest", 
+                    "Accept": "application/json",
+                    "X-User-Role": CURRENT_USER_ROLE
+                },
                 body: formData
             })
             .then(res => res.json())
@@ -1257,7 +1340,41 @@ CONTROLLER;
                     alert("✅ " + data.message);
                     location.reload();
                 } else {
-                    alert("❌ পুনরুদ্ধার ব্যর্থ হয়েছে: " + (data.message || "ত্রুটি"));
+                    alert("❌ পুনরুদ্ধার ব্যর্থ হয়েছে (403/500): " + (data.message || "ত্রুটি"));
+                }
+            })
+            .catch(err => alert("ত্রুটি: " + err));
+        }
+
+        function triggerColdArchive(days) {
+            if (CURRENT_USER_ROLE !== "super_admin") {
+                alert("❌ অনুমতি অস্বীকৃত: শুধুমাত্র Super Admin কোল্ড আর্কাইভ প্রক্রিয়া চালাতে পারেন।");
+                return;
+            }
+            if (!confirm("❄️ আপনি কি নিশ্চিতভাবে " + days + " দিনের বেশি পুরনো সমস্ত অডিট লগ মূল টেবিল থেকে সরিয়ে কোল্ড আর্কাইভে স্থানান্তর করতে চান?")) {
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("days", days);
+            formData.append("user_role", CURRENT_USER_ROLE);
+
+            fetch("/system/audit/archive-cold", {
+                method: "POST",
+                headers: { 
+                    "X-Requested-With": "XMLHttpRequest", 
+                    "Accept": "application/json",
+                    "X-User-Role": CURRENT_USER_ROLE
+                },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert("✅ " + data.message);
+                    location.reload();
+                } else {
+                    alert("❌ কোল্ড আর্কাইভ ব্যর্থ হয়েছে: " + (data.message || "ত্রুটি"));
                 }
             })
             .catch(err => alert("ত্রুটি: " + err));
@@ -1269,16 +1386,26 @@ CONTROLLER;
     }
 
     /**
-     * Restore a deleted record from audit footprint back into MySQL
+     * Restore a deleted record from audit footprint back into MySQL.
+     * RESTRICTED: Strictly Super Admin only.
      */
     public function restoreDeleted(Request $request): Response
     {
+        $operatorRole = AuthHelper::getCurrentRole($request);
+
+        if (!AuthHelper::isSuperAdmin($request)) {
+            return Response::json([
+                'success' => false,
+                'message' => 'অননুমোদিত অ্যাক্সেস (403 Forbidden): শুধুমাত্র Super Admin মোছা ডাটা পুনরুদ্ধার করতে পারবেন। অন্যরা কেবল দেখার অনুমতি পাবে।'
+            ], 403);
+        }
+
         $auditId = (int) $request->input('audit_id', 0);
         if ($auditId <= 0) {
             return Response::json(['success' => false, 'message' => 'সঠিক অডিট আইডি প্রদান করা আবশ্যক।'], 400);
         }
 
-        $restored = ModuleDataRepository::restoreDeletedRecord($auditId);
+        $restored = ModuleDataRepository::restoreDeletedRecord($auditId, $operatorRole);
         if ($restored) {
             return Response::json([
                 'success' => true,
@@ -1288,8 +1415,125 @@ CONTROLLER;
 
         return Response::json([
             'success' => false,
-            'message' => 'রেকর্ডটি পুনরুদ্ধার করা সম্ভব হয়নি।'
+            'message' => 'রেকর্ডটি পুনরুদ্ধার করা সম্ভব হয়নি বা অডিট রেকর্ড পাওয়া যায়নি।'
         ], 500);
     }
+
+    /**
+     * Archive old audit records to Cold Storage (e.g. older than 180 days).
+     * RESTRICTED: Strictly Super Admin only.
+     */
+    public function archiveColdAudit(Request $request): Response
+    {
+        if (!AuthHelper::isSuperAdmin($request)) {
+            return Response::json([
+                'success' => false,
+                'message' => 'অননুমোদিত অ্যাক্সেস (403 Forbidden): শুধুমাত্র Super Admin কোল্ড আর্কাইভ প্রক্রিয়া চালাতে পারেন।'
+            ], 403);
+        }
+
+        $days = (int) $request->input('days', 180);
+        if ($days <= 0) {
+            $days = 180;
+        }
+
+        $user = AuthHelper::getCurrentUser($request)['email'] ?? 'super_admin';
+        $result = ModuleDataRepository::archiveColdAuditRecords($days, "manual_admin_{$user}");
+
+        return Response::json($result, $result['success'] ? 200 : 500);
+    }
+
+    /**
+     * View Cold Archived Audit Records.
+     */
+    public function coldArchiveView(Request $request): Response
+    {
+        $currentRole = AuthHelper::getCurrentRole($request);
+        $isSuperAdmin = AuthHelper::isSuperAdmin($request);
+
+        $entityFilter = trim((string) $request->input('entity', ''));
+        $coldLogs = ModuleDataRepository::getColdArchivedRecords($entityFilter ?: null, 100);
+
+        $totalCount = count($coldLogs);
+
+        $rowsHtml = '';
+        if (empty($coldLogs)) {
+            $rowsHtml = '<tr><td colspan="7" style="text-align:center; padding:35px; color:#64748b;">❄️ কোল্ড আর্কাইভে বর্তমানে কোনো সংরক্ষিত পুরনো লগ নেই। (১৮০ দিনের বেশি পুরনো লগ কোল্ড আর্কাইভে সরানো হয়)</td></tr>';
+        } else {
+            foreach ($coldLogs as $row) {
+                $rawJson = htmlspecialchars($row['record_data'] ?? '{}', ENT_QUOTES, 'UTF-8');
+                $rowsHtml .= '
+                <tr>
+                    <td><code>#' . (int)$row['id'] . '</code> (অরিজিনাল #' . (int)$row['original_audit_id'] . ')</td>
+                    <td>' . ModuleLayoutHelper::badge((string)$row['entity'], 'secondary') . '</td>
+                    <td><strong>' . htmlspecialchars((string)$row['record_id']) . '</strong></td>
+                    <td>👤 ' . htmlspecialchars((string)($row['deleted_by'] ?? 'N/A')) . '</td>
+                    <td>📅 ' . htmlspecialchars((string)($row['deleted_day'] ?? '')) . '<br><small>' . htmlspecialchars((string)$row['created_at']) . '</small></td>
+                    <td>❄️ ' . htmlspecialchars((string)$row['archived_at']) . '<br><small style="color:#64748b;">' . htmlspecialchars((string)$row['archived_by']) . '</small></td>
+                    <td>
+                        <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:11px;" onclick=\'alert("স্ন্যাপশট ডাটা:\\n" + JSON.stringify(' . $rawJson . ', null, 2))\'>👁️ ভিউ</button>
+                    </td>
+                </tr>';
+            }
+        }
+
+        $body = '
+        <div style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <h2 style="margin:0 0 4px 0; font-size:20px; font-weight:700;">❄️ কোল্ড অডিট স্টোরেজ আর্কাইভ (Cold Audit Archive)</h2>
+                <p style="margin:0; font-size:13px; color:#64748b;">১৮০ দিনের পুরনো ডাটা লং-টার্ম কমপ্লায়েন্স ও কোল্ড স্টোরেজ সুরক্ষার জন্য পৃথক টেবিলে সংরক্ষিত</p>
+            </div>
+            <div>
+                <a href="/system/audit/deleted?as_role=' . urlencode($currentRole) . '" class="btn btn-secondary">← অ্যাক্টিভ অডিট লগে ফিরে যান</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>আর্কাইভ ID</th>
+                            <th>মডিউল</th>
+                            <th>রেকর্ড ID</th>
+                            <th>কে মুছেছিল</th>
+                            <th>মোছার তারিখ ও সময়</th>
+                            <th>আর্কাইভ তারিখ ও উৎস</th>
+                            <th>ডাটা</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ' . $rowsHtml . '
+                    </tbody>
+                </table>
+            </div>
+        </div>';
+
+        return Response::html(ModuleLayoutHelper::wrap('system', 'কোল্ড অডিট আর্কাইভ', $body, '', '', '/system/audit/cold-archive'));
+    }
+
+    /**
+     * Purge active audit records.
+     * RESTRICTED: Strictly Super Admin only.
+     */
+    public function purgeAudit(Request $request): Response
+    {
+        if (!AuthHelper::isSuperAdmin($request)) {
+            return Response::json([
+                'success' => false,
+                'message' => 'অননুমোদিত অ্যাক্সেস (403 Forbidden): শুধুমাত্র Super Admin অডিট লগ মুছতে পারেন।'
+            ], 403);
+        }
+
+        $auditId = $request->input('audit_id');
+        $id = is_numeric($auditId) ? (int)$auditId : null;
+        $success = ModuleDataRepository::purgeAuditRecords($id, 'super_admin');
+
+        return Response::json([
+            'success' => $success,
+            'message' => $success ? 'অডিট রেকর্ড সফলভাবে পরিষ্কার করা হয়েছে।' : 'অডিট রেকর্ড মোছা সম্ভব হয়নি।'
+        ]);
+    }
 }
+
 

@@ -33,4 +33,7 @@ $router->post('/system/modules/upload', [SystemController::class, 'handleUpload'
 $router->get('/system/modules/download-sample', [SystemController::class, 'downloadSample'])->name('system.modules.sample');
 $router->get('/system/audit/deleted', [SystemController::class, 'auditDeleted'])->name('system.audit.deleted');
 $router->post('/system/audit/restore', [SystemController::class, 'restoreDeleted'])->name('system.audit.restore');
+$router->post('/system/audit/archive-cold', [SystemController::class, 'archiveColdAudit'])->name('system.audit.archive_cold');
+$router->get('/system/audit/cold-archive', [SystemController::class, 'coldArchiveView'])->name('system.audit.cold_archive');
+$router->post('/system/audit/purge', [SystemController::class, 'purgeAudit'])->name('system.audit.purge');
 
