@@ -226,6 +226,10 @@ class ModuleLayoutHelper
         $dashboardLabel  = $isBn ? "মূল ড্যাশবোর্ড" : "Main Dashboard";
         $healthLabel     = $isBn ? "সিস্টেম হেলথ" : "System Health";
 
+        $userDropdownHtml = AuthHelper::renderUserDropdown($isBn);
+        $userDropdownCss  = AuthHelper::renderDropdownStyles();
+        $userDropdownJs   = AuthHelper::renderDropdownScript();
+
         return <<<HTML
 <!DOCTYPE html>
 <html lang="{$locale}">
@@ -438,6 +442,7 @@ class ModuleLayoutHelper
         .footer-links a { color: var(--text-muted); text-decoration: none; font-weight: 500; }
         .footer-links a:hover { color: var(--primary); }
 
+        {$userDropdownCss}
         {$extraCss}
     </style>
 </head>
@@ -497,6 +502,7 @@ class ModuleLayoutHelper
                     <a href="?lang=bn" class="lang-btn" style="{$bnActive}">বাং</a>
                 </div>
                 <a href="/admin/dashboard" class="btn btn-secondary">⚡ {$dashboardLabel}</a>
+                {$userDropdownHtml}
             </div>
         </header>
 
@@ -518,6 +524,8 @@ class ModuleLayoutHelper
     </div>
 
     <script>
+    {$userDropdownJs}
+
     function confirmDeleteRecord(entity, id, deleteUrl, label) {
         const recordLabel = label || id;
         const confirmMsg = "⚠️ আপনি কি নিশ্চিতভাবে '" + recordLabel + "' মুছে ফেলতে চান?\n\nফুটপ্রিন্ট ট্রেসিং: এই ডাটা মোছার সাথে সাথে আপনার ইউজার আইডি, আইপি অ্যাড্রেস, টাইমস্ট্যাম্প ও সম্পূর্ণ ডাটার স্ন্যাপশট অডিট ফুটপ্রিন্ট টেবিলে সংরক্ষিত হবে।";

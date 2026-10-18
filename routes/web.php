@@ -189,3 +189,20 @@ $router->post('/license/activate', [\NetFusion\App\Http\Controllers\LicenseContr
 $router->post('/license/check', [\NetFusion\App\Http\Controllers\LicenseController::class, 'check'])->name('license.check');
 $router->post('/license/deactivate', [\NetFusion\App\Http\Controllers\LicenseController::class, 'deactivate'])->name('license.deactivate');
 
+// ============================================================
+//  Authentication & User Profile Routes (Phase 121)
+// ============================================================
+
+$router->get('/login', [\NetFusion\App\Http\Controllers\AuthController::class, 'showLogin'])->name('login');
+$router->post('/login', [\NetFusion\App\Http\Controllers\AuthController::class, 'handleLogin'])->name('login.post');
+$router->get('/logout', [\NetFusion\App\Http\Controllers\AuthController::class, 'handleLogout'])->name('logout');
+$router->post('/logout', [\NetFusion\App\Http\Controllers\AuthController::class, 'handleLogout'])->name('logout.post');
+
+$router->get('/profile', [\NetFusion\App\Http\Controllers\AuthController::class, 'showProfile'])->name('profile');
+$router->post('/profile', [\NetFusion\App\Http\Controllers\AuthController::class, 'updateProfile'])->name('profile.update');
+$router->post('/profile/password', [\NetFusion\App\Http\Controllers\AuthController::class, 'changePassword'])->name('profile.password');
+$router->get('/admin/profile', function () {
+    return \NetFusion\Core\Http\Response::redirect('/profile');
+});
+
+

@@ -486,6 +486,14 @@ class ModuleDataRepository
     }
 
     /**
+     * Alias for restoreDeletedRecord.
+     */
+    public static function restoreFromAudit(int $auditId, string $operatorRole = 'super_admin'): bool
+    {
+        return self::restoreDeletedRecord($auditId, $operatorRole);
+    }
+
+    /**
      * Purge or delete audit footprint records.
      * SECURITY POLICY: Strictly restricted to 'super_admin'. Blocked for everyone else.
      *
@@ -737,6 +745,55 @@ class ModuleDataRepository
     protected static function getTableSchema(string $table): ?string
     {
         return match ($table) {
+            // ---------------------------------------------------------
+            // 1. BILLING MODULE
+            // ---------------------------------------------------------
+            'billing_customers' => "CREATE TABLE IF NOT EXISTS `billing_customers` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `tenant_id` VARCHAR(100) NULL,
+                `name` VARCHAR(255) NOT NULL,
+                `email` VARCHAR(255) NOT NULL,
+                `phone` VARCHAR(50) NULL,
+                `company_name` VARCHAR(255) NULL,
+                `billing_address` TEXT NULL,
+                `tax_id` VARCHAR(100) NULL,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL,
+                INDEX `idx_cust_tenant` (`tenant_id`),
+                INDEX `idx_cust_email` (`email`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'billing_invoice_items' => "CREATE TABLE IF NOT EXISTS `billing_invoice_items` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `invoice_id` VARCHAR(50) NOT NULL,
+                `item_name` VARCHAR(255) NOT NULL,
+                `description` TEXT NULL,
+                `quantity` DECIMAL(10,2) DEFAULT 1.00,
+                `unit_price` DECIMAL(15,2) DEFAULT 0.00,
+                `tax_rate` DECIMAL(5,2) DEFAULT 0.00,
+                `line_total` DECIMAL(15,2) DEFAULT 0.00,
+                `created_at` DATETIME NULL,
+                INDEX `idx_item_invoice` (`invoice_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'billing_payments' => "CREATE TABLE IF NOT EXISTS `billing_payments` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `invoice_id` VARCHAR(50) NOT NULL,
+                `customer_id` VARCHAR(50) NULL,
+                `transaction_ref` VARCHAR(100) NOT NULL,
+                `gateway` VARCHAR(100) DEFAULT 'নগদ / বিকাশ',
+                `payment_method` VARCHAR(100) DEFAULT 'bKash Online',
+                `amount` DECIMAL(15,2) DEFAULT 0.00,
+                `currency` VARCHAR(10) DEFAULT 'BDT',
+                `payment_date` DATETIME NOT NULL,
+                `status` VARCHAR(50) DEFAULT 'success',
+                `notes` TEXT NULL,
+                `created_at` DATETIME NULL,
+                INDEX `idx_pay_invoice` (`invoice_id`),
+                INDEX `idx_pay_customer` (`customer_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
             'billing_invoices' => "CREATE TABLE IF NOT EXISTS `billing_invoices` (
                 `id` VARCHAR(50) NOT NULL PRIMARY KEY,
                 `customer` VARCHAR(255) NOT NULL,
@@ -775,6 +832,51 @@ class ModuleDataRepository
                 `updated_at` DATETIME NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
+            // ---------------------------------------------------------
+            // 2. INVENTORY MODULE
+            // ---------------------------------------------------------
+            'inventory_categories' => "CREATE TABLE IF NOT EXISTS `inventory_categories` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `category_code` VARCHAR(50) NOT NULL,
+                `name` VARCHAR(255) NOT NULL,
+                `parent_id` VARCHAR(50) NULL,
+                `description` TEXT NULL,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL,
+                INDEX `idx_cat_parent` (`parent_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'inventory_suppliers' => "CREATE TABLE IF NOT EXISTS `inventory_suppliers` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `supplier_code` VARCHAR(50) NOT NULL,
+                `company_name` VARCHAR(255) NOT NULL,
+                `contact_person` VARCHAR(150) NULL,
+                `phone` VARCHAR(50) NULL,
+                `email` VARCHAR(255) NULL,
+                `address` TEXT NULL,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'inventory_stock_movements' => "CREATE TABLE IF NOT EXISTS `inventory_stock_movements` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `reference_no` VARCHAR(100) NOT NULL,
+                `product_id` VARCHAR(50) NOT NULL,
+                `source_warehouse_id` VARCHAR(50) NULL,
+                `target_warehouse_id` VARCHAR(50) NULL,
+                `movement_type` VARCHAR(50) NOT NULL COMMENT 'in, out, transfer, adjustment',
+                `quantity` INT NOT NULL,
+                `unit_cost` DECIMAL(15,2) DEFAULT 0.00,
+                `notes` TEXT NULL,
+                `performed_by` VARCHAR(150) NULL,
+                `created_at` DATETIME NOT NULL,
+                INDEX `idx_move_prod` (`product_id`),
+                INDEX `idx_move_src` (`source_warehouse_id`),
+                INDEX `idx_move_tgt` (`target_warehouse_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
             'inventory_products' => "CREATE TABLE IF NOT EXISTS `inventory_products` (
                 `id` VARCHAR(50) NOT NULL PRIMARY KEY,
                 `sku` VARCHAR(100) NOT NULL,
@@ -801,6 +903,46 @@ class ModuleDataRepository
                 `updated_at` DATETIME NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
+            // ---------------------------------------------------------
+            // 3. ACCOUNTING MODULE
+            // ---------------------------------------------------------
+            'accounting_fiscal_years' => "CREATE TABLE IF NOT EXISTS `accounting_fiscal_years` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `year_title` VARCHAR(100) NOT NULL,
+                `start_date` DATE NOT NULL,
+                `end_date` DATE NOT NULL,
+                `is_closed` TINYINT(1) DEFAULT 0,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'accounting_chart_of_accounts' => "CREATE TABLE IF NOT EXISTS `accounting_chart_of_accounts` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `account_code` VARCHAR(50) NOT NULL UNIQUE,
+                `account_name` VARCHAR(255) NOT NULL,
+                `account_type` VARCHAR(50) NOT NULL COMMENT 'asset, liability, equity, revenue, expense',
+                `parent_code` VARCHAR(50) NULL,
+                `normal_balance` VARCHAR(10) DEFAULT 'debit',
+                `opening_balance` DECIMAL(15,2) DEFAULT 0.00,
+                `current_balance` DECIMAL(15,2) DEFAULT 0.00,
+                `is_active` TINYINT(1) DEFAULT 1,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL,
+                INDEX `idx_coa_type` (`account_type`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'accounting_voucher_entries' => "CREATE TABLE IF NOT EXISTS `accounting_voucher_entries` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `voucher_id` VARCHAR(50) NOT NULL,
+                `account_id` VARCHAR(50) NOT NULL,
+                `entry_description` TEXT NULL,
+                `debit_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `credit_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `created_at` DATETIME NULL,
+                INDEX `idx_entry_voucher` (`voucher_id`),
+                INDEX `idx_entry_account` (`account_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
             'accounting_journal' => "CREATE TABLE IF NOT EXISTS `accounting_journal` (
                 `id` VARCHAR(50) NOT NULL PRIMARY KEY,
                 `voucher_no` VARCHAR(50) NOT NULL,
@@ -813,6 +955,52 @@ class ModuleDataRepository
                 `status` VARCHAR(50) DEFAULT 'posted',
                 `created_at` DATETIME NULL,
                 `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            // ---------------------------------------------------------
+            // 4. COMMERCE MODULE
+            // ---------------------------------------------------------
+            'commerce_customers' => "CREATE TABLE IF NOT EXISTS `commerce_customers` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `name` VARCHAR(255) NOT NULL,
+                `email` VARCHAR(255) NOT NULL,
+                `phone` VARCHAR(50) NULL,
+                `shipping_address` TEXT NULL,
+                `city` VARCHAR(100) NULL,
+                `loyalty_points` INT DEFAULT 0,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'commerce_coupons' => "CREATE TABLE IF NOT EXISTS `commerce_coupons` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `coupon_code` VARCHAR(50) NOT NULL UNIQUE,
+                `discount_type` VARCHAR(20) DEFAULT 'percent',
+                `discount_value` DECIMAL(10,2) NOT NULL,
+                `min_order_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `max_discount` DECIMAL(15,2) NULL,
+                `starts_at` DATETIME NULL,
+                `expires_at` DATETIME NULL,
+                `usage_limit` INT DEFAULT 100,
+                `usage_count` INT DEFAULT 0,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'commerce_order_items' => "CREATE TABLE IF NOT EXISTS `commerce_order_items` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `order_id` VARCHAR(50) NOT NULL,
+                `product_id` VARCHAR(50) NULL,
+                `product_name` VARCHAR(255) NOT NULL,
+                `sku` VARCHAR(100) NULL,
+                `unit_price` DECIMAL(15,2) NOT NULL,
+                `quantity` INT DEFAULT 1,
+                `line_total` DECIMAL(15,2) NOT NULL,
+                `created_at` DATETIME NULL,
+                INDEX `idx_orditem_order` (`order_id`),
+                INDEX `idx_orditem_prod` (`product_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
             'commerce_orders' => "CREATE TABLE IF NOT EXISTS `commerce_orders` (
@@ -828,6 +1016,67 @@ class ModuleDataRepository
                 `updated_at` DATETIME NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
+            // ---------------------------------------------------------
+            // 5. CRM MODULE
+            // ---------------------------------------------------------
+            'crm_companies' => "CREATE TABLE IF NOT EXISTS `crm_companies` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `company_name` VARCHAR(255) NOT NULL,
+                `industry` VARCHAR(150) NULL,
+                `website` VARCHAR(255) NULL,
+                `phone` VARCHAR(50) NULL,
+                `email` VARCHAR(255) NULL,
+                `address` TEXT NULL,
+                `annual_revenue` DECIMAL(15,2) DEFAULT 0.00,
+                `status` VARCHAR(50) DEFAULT 'active',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'crm_contacts' => "CREATE TABLE IF NOT EXISTS `crm_contacts` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `company_id` VARCHAR(50) NULL,
+                `first_name` VARCHAR(150) NOT NULL,
+                `last_name` VARCHAR(150) NULL,
+                `designation` VARCHAR(150) NULL,
+                `email` VARCHAR(255) NOT NULL,
+                `phone` VARCHAR(50) NULL,
+                `is_primary` TINYINT(1) DEFAULT 0,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL,
+                INDEX `idx_contact_comp` (`company_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'crm_deals' => "CREATE TABLE IF NOT EXISTS `crm_deals` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `deal_code` VARCHAR(50) NOT NULL,
+                `lead_id` VARCHAR(50) NULL,
+                `company_id` VARCHAR(50) NULL,
+                `deal_name` VARCHAR(255) NOT NULL,
+                `deal_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `pipeline_stage` VARCHAR(100) DEFAULT 'Discovery',
+                `closing_date` DATE NULL,
+                `probability_pct` INT DEFAULT 50,
+                `status` VARCHAR(50) DEFAULT 'open',
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL,
+                INDEX `idx_deal_lead` (`lead_id`),
+                INDEX `idx_deal_comp` (`company_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'crm_tickets' => "CREATE TABLE IF NOT EXISTS `crm_tickets` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `ticket_no` VARCHAR(50) NOT NULL UNIQUE,
+                `contact_id` VARCHAR(50) NULL,
+                `subject` VARCHAR(255) NOT NULL,
+                `priority` VARCHAR(50) DEFAULT 'medium',
+                `status` VARCHAR(50) DEFAULT 'open',
+                `assigned_agent` VARCHAR(150) NULL,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL,
+                INDEX `idx_ticket_contact` (`contact_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
             'crm_leads' => "CREATE TABLE IF NOT EXISTS `crm_leads` (
                 `id` VARCHAR(50) NOT NULL PRIMARY KEY,
                 `name` VARCHAR(255) NOT NULL,
@@ -838,6 +1087,60 @@ class ModuleDataRepository
                 `status` VARCHAR(50) DEFAULT 'active',
                 `created_at` DATETIME NULL,
                 `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            // ---------------------------------------------------------
+            // 6. HRM MODULE
+            // ---------------------------------------------------------
+            'hrm_departments' => "CREATE TABLE IF NOT EXISTS `hrm_departments` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `department_code` VARCHAR(50) NOT NULL,
+                `department_name` VARCHAR(255) NOT NULL,
+                `head_name` VARCHAR(150) NULL,
+                `location` VARCHAR(255) NULL,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'hrm_designations' => "CREATE TABLE IF NOT EXISTS `hrm_designations` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `department_id` VARCHAR(50) NULL,
+                `designation_title` VARCHAR(255) NOT NULL,
+                `grade_level` VARCHAR(50) NULL,
+                `min_salary` DECIMAL(15,2) DEFAULT 0.00,
+                `max_salary` DECIMAL(15,2) DEFAULT 0.00,
+                `created_at` DATETIME NULL,
+                `updated_at` DATETIME NULL,
+                INDEX `idx_desig_dept` (`department_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'hrm_attendance' => "CREATE TABLE IF NOT EXISTS `hrm_attendance` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `employee_id` VARCHAR(50) NOT NULL,
+                `attendance_date` DATE NOT NULL,
+                `clock_in` TIME NULL,
+                `clock_out` TIME NULL,
+                `working_hours` DECIMAL(5,2) DEFAULT 8.00,
+                `attendance_status` VARCHAR(50) DEFAULT 'present',
+                `created_at` DATETIME NULL,
+                INDEX `idx_att_emp` (`employee_id`),
+                INDEX `idx_att_date` (`attendance_date`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            'hrm_payroll' => "CREATE TABLE IF NOT EXISTS `hrm_payroll` (
+                `id` VARCHAR(50) NOT NULL PRIMARY KEY,
+                `payroll_no` VARCHAR(50) NOT NULL,
+                `employee_id` VARCHAR(50) NOT NULL,
+                `salary_month` VARCHAR(20) NOT NULL,
+                `basic_salary` DECIMAL(15,2) NOT NULL,
+                `allowance_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `deduction_amount` DECIMAL(15,2) DEFAULT 0.00,
+                `net_payable` DECIMAL(15,2) NOT NULL,
+                `payment_method` VARCHAR(100) DEFAULT 'Bank Transfer',
+                `payment_status` VARCHAR(50) DEFAULT 'paid',
+                `payment_date` DATE NULL,
+                `created_at` DATETIME NULL,
+                INDEX `idx_pay_emp` (`employee_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
             'hrm_employees' => "CREATE TABLE IF NOT EXISTS `hrm_employees` (
@@ -851,6 +1154,9 @@ class ModuleDataRepository
                 `updated_at` DATETIME NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
+            // ---------------------------------------------------------
+            // 7. SYSTEM & TENANCY MODULE
+            // ---------------------------------------------------------
             'tenants' => "CREATE TABLE IF NOT EXISTS `tenants` (
                 `id` VARCHAR(100) NOT NULL PRIMARY KEY,
                 `name` VARCHAR(255) NOT NULL,
@@ -868,11 +1174,18 @@ class ModuleDataRepository
                 `id` VARCHAR(100) NOT NULL PRIMARY KEY,
                 `name` VARCHAR(255) NOT NULL,
                 `email` VARCHAR(255) NOT NULL,
+                `password_hash` VARCHAR(255) NULL,
                 `role` VARCHAR(50) NOT NULL,
                 `tenant_id` VARCHAR(100) NULL,
+                `avatar_url` VARCHAR(255) NULL,
+                `phone` VARCHAR(50) NULL,
+                `bio` TEXT NULL,
+                `last_login_at` DATETIME NULL,
                 `status` VARCHAR(50) DEFAULT 'Active',
                 `created_at` VARCHAR(50) NULL,
-                `updated_at` DATETIME NULL
+                `updated_at` DATETIME NULL,
+                INDEX `idx_usr_email` (`email`),
+                INDEX `idx_usr_tenant` (`tenant_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
             'site_settings' => "CREATE TABLE IF NOT EXISTS `site_settings` (

@@ -27,6 +27,7 @@ declare(strict_types=1);
 namespace NetFusion\App\Http\Controllers;
 
 use DateTimeImmutable;
+use NetFusion\App\Http\Helpers\AuthHelper;
 use NetFusion\App\Http\Helpers\SiteSettingsHelper;
 use NetFusion\App\Services\ModuleDataRepository;
 use NetFusion\Core\Database\DatabaseManager;
@@ -734,6 +735,10 @@ class DashboardController
 
         $enActive = !$isBn ? 'background: #2563eb; color: #ffffff;' : 'color: #64748b; background: transparent;';
         $bnActive = $isBn ? 'background: #2563eb; color: #ffffff;' : 'color: #64748b; background: transparent;';
+
+        $userDropdownHtml = AuthHelper::renderUserDropdown($isBn);
+        $userDropdownCss  = AuthHelper::renderDropdownStyles();
+        $userDropdownJs   = AuthHelper::renderDropdownScript();
 
         // Bilingual labels (English default, Bengali secondary)
         $txt = [
@@ -1448,6 +1453,7 @@ HTML;
         .footer-links { display: flex; gap: 20px; }
         .footer-links a { color: var(--text-muted); text-decoration: none; font-weight: 500; transition: color 0.15s; }
         .footer-links a:hover { color: var(--primary); }
+        {$userDropdownCss}
     </style>
 </head>
 <body>
@@ -1551,10 +1557,7 @@ HTML;
 
                     {$licStatusBadge}
 
-                    <div class="user-pill">
-                        <div class="user-avatar" style="background:#2563eb;">A</div>
-                        <span>Super Administrator</span>
-                    </div>
+                    {$userDropdownHtml}
                 </div>
             </header>
 
@@ -2226,6 +2229,8 @@ HTML;
                 showToast('সার্ভার যোগাযোগে সমস্যা হয়েছে', true);
             }
         }
+
+        {$userDropdownJs}
     </script>
 </body>
 </html>
