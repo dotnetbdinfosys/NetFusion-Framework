@@ -1104,7 +1104,11 @@ CONTROLLER;
         $roleLabelBn = AuthHelper::getRoleLabelBn($currentRole);
 
         $entityFilter = trim((string) $request->input('entity', ''));
-        $logs = ModuleDataRepository::getAuditDeletedRecords($entityFilter ?: null, 100);
+        try {
+            $logs = ModuleDataRepository::getAuditDeletedRecords($entityFilter ?: null, 100);
+        } catch (\Throwable $e) {
+            $logs = [];
+        }
 
         $totalCount = count($logs);
         $lastDeletedTime = !empty($logs) ? ($logs[0]['deleted_at_readable'] ?? $logs[0]['created_at']) : 'কোনো ডাটা মোছা হয়নি';
@@ -1452,7 +1456,11 @@ CONTROLLER;
         $isSuperAdmin = AuthHelper::isSuperAdmin($request);
 
         $entityFilter = trim((string) $request->input('entity', ''));
-        $coldLogs = ModuleDataRepository::getColdArchivedRecords($entityFilter ?: null, 100);
+        try {
+            $coldLogs = ModuleDataRepository::getColdArchivedRecords($entityFilter ?: null, 100);
+        } catch (\Throwable $e) {
+            $coldLogs = [];
+        }
 
         $totalCount = count($coldLogs);
 

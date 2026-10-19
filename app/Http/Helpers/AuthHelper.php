@@ -58,6 +58,10 @@ class AuthHelper
             return self::$cachedUser;
         }
 
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            @session_start();
+        }
+
         $sessionUserId = $_SESSION['user_id'] ?? null;
         $sessionEmail = $_SESSION['user_email'] ?? null;
 

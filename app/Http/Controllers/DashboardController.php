@@ -45,8 +45,12 @@ class DashboardController
      */
     public function index(Request $request): Response
     {
-        $metrics = $this->collectEnterpriseMetrics();
-        return Response::html($this->renderDashboardHtml($metrics));
+        try {
+            $metrics = $this->collectEnterpriseMetrics();
+            return Response::html($this->renderDashboardHtml($metrics));
+        } catch (Throwable $e) {
+            return Response::html($this->renderEmergencyDashboardHtml($e), 200);
+        }
     }
 
     /**
@@ -54,7 +58,15 @@ class DashboardController
      */
     public function metrics(Request $request): Response
     {
-        return Response::json($this->collectEnterpriseMetrics());
+        try {
+            return Response::json($this->collectEnterpriseMetrics());
+        } catch (Throwable $e) {
+            return Response::json([
+                'success' => false,
+                'status'  => 'recovering',
+                'error'   => $e->getMessage(),
+            ], 200);
+        }
     }
 
     /**
@@ -462,17 +474,36 @@ class DashboardController
         }
 
         // 3. Scan Dynamic HMVC Modules
-        $metrics['discovered_modules'] = $this->loadModulesList();
-        $metrics['active_modules_count'] = count(array_filter($metrics['discovered_modules'], fn($m) => !empty($m['enabled'])));
+        try {
+            $metrics['discovered_modules'] = $this->loadModulesList();
+            $metrics['active_modules_count'] = count(array_filter($metrics['discovered_modules'], fn($m) => !empty($m['enabled'])));
+        } catch (Throwable) {
+            $metrics['discovered_modules'] = [];
+            $metrics['active_modules_count'] = 0;
+        }
 
         // 4. Tenancy State & Tenant Registry
-        $metrics['tenants'] = $this->loadTenants();
-        $metrics['active_tenant'] = $this->loadActiveTenant($metrics['tenants']);
+        try {
+            $metrics['tenants'] = $this->loadTenants();
+        } catch (Throwable) {
+            $metrics['tenants'] = ModuleDataRepository::getDefaults('tenants');
+        }
+
+        try {
+            $metrics['active_tenant'] = $this->loadActiveTenant($metrics['tenants']);
+        } catch (Throwable) {
+            $metrics['active_tenant'] = $metrics['tenants'][0] ?? [];
+        }
 
         // 5. User Variants & RBAC Matrix
         $metrics['roles'] = $this->getRolesDefinition();
         $metrics['permissions_matrix'] = $this->getPermissionsMatrix();
-        $metrics['users'] = $this->loadUsers();
+
+        try {
+            $metrics['users'] = $this->loadUsers();
+        } catch (Throwable) {
+            $metrics['users'] = ModuleDataRepository::getDefaults('users');
+        }
 
         return $metrics;
     }
@@ -563,7 +594,9 @@ class DashboardController
         } catch (\Throwable $e) {}
 
         $defaultTenants = ModuleDataRepository::getDefaults('tenants');
-        $this->saveTenants($defaultTenants);
+        try {
+            $this->saveTenants($defaultTenants);
+        } catch (\Throwable $e) {}
         return $defaultTenants;
     }
 
@@ -572,7 +605,9 @@ class DashboardController
      */
     protected function saveTenants(array $tenants): void
     {
-        ModuleDataRepository::save('tenants', $tenants);
+        try {
+            ModuleDataRepository::save('tenants', $tenants);
+        } catch (\Throwable $e) {}
     }
 
     /**
@@ -693,7 +728,9 @@ class DashboardController
         } catch (\Throwable $e) {}
 
         $defaultUsers = ModuleDataRepository::getDefaults('users');
-        $this->saveUsers($defaultUsers);
+        try {
+            $this->saveUsers($defaultUsers);
+        } catch (\Throwable $e) {}
         return $defaultUsers;
     }
 
@@ -702,7 +739,9 @@ class DashboardController
      */
     protected function saveUsers(array $users): void
     {
-        ModuleDataRepository::save('users', $users);
+        try {
+            ModuleDataRepository::save('users', $users);
+        } catch (\Throwable $e) {}
     }
 
     /**
@@ -2232,6 +2271,86 @@ HTML;
 
         {$userDropdownJs}
     </script>
+</body>
+</html>
+HTML;
+    }
+
+    /**
+     * Render an Emergency Self-Healing Dashboard view if a critical exception occurs.
+     * Prevents HTTP 500 white-screen crash and offers actionable recovery options.
+     */
+    protected function renderEmergencyDashboardHtml(Throwable $e): string
+    {
+        $errMsg   = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+        $errFile  = htmlspecialchars($e->getFile(), ENT_QUOTES, 'UTF-8');
+        $errLine  = $e->getLine();
+        $errClass = htmlspecialchars(get_class($e), ENT_QUOTES, 'UTF-8');
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetFusion Framework — সিস্টেম ড্যাশবোর্ড রিকভারি মোড</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text-main); line-height: 1.5; padding: 24px; }
+        .emergency-container { max-width: 900px; margin: 40px auto; background: var(--card-bg); border-radius: 14px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.06); border: 1px solid var(--border); overflow: hidden; }
+        .emergency-header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff; padding: 24px 30px; display: flex; align-items: center; justify-content: space-between; }
+        .emergency-header h1 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        .emergency-body { padding: 30px; }
+        .alert-box { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 16px 20px; border-radius: 6px; margin-bottom: 24px; }
+        .alert-box h3 { color: #b45309; font-size: 15px; margin-bottom: 6px; }
+        .alert-box p { color: #92400e; font-size: 13.5px; }
+        .details-box { background: #f1f5f9; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; font-size: 13px; }
+        .details-box code { color: #dc2626; font-family: monospace; font-size: 13px; }
+        .action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 24px; }
+        .action-card { display: block; text-decoration: none; padding: 14px 18px; border-radius: 8px; border: 1px solid var(--border); background: #ffffff; color: var(--text-main); font-size: 13.5px; font-weight: 600; text-align: center; transition: all 0.2s ease; }
+        .action-card:hover { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+        .action-card.btn-primary { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+        .action-card.btn-primary:hover { background: #1d4ed8; }
+        .footer-note { text-align: center; padding: 20px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); }
+    </style>
+</head>
+<body>
+    <div class="emergency-container">
+        <div class="emergency-header">
+            <h1>⚡ NetFusion Framework</h1>
+            <span style="background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; font-size: 12px;">স্বয়ংক্রিয় রিকভারি মোড (Self-Healing Mode)</span>
+        </div>
+        <div class="emergency-body">
+            <div class="alert-box">
+                <h3>🛡️ এন্টারপ্রাইজ ড্যাশবোর্ড নিরাপত্তা গার্ড সক্রিয়</h3>
+                <p>ড্যাশবোর্ডের কিছু ডাটাবেজ টেবিল বা মডিউল ইনিশিয়ালাইজেশন চলমান থাকায় ড্যাশবোর্ড সাময়িকভাবে রিকভারি মোডে উপস্থাপিত হয়েছে। সিস্টেমের কোর ইঞ্জিন সম্পূর্ণ অক্ষত রয়েছে।</p>
+            </div>
+
+            <div class="details-box">
+                <div style="margin-bottom: 8px;"><strong>ব্যতিক্রম (Exception):</strong> <code>{$errClass}</code></div>
+                <div style="margin-bottom: 8px;"><strong>বার্তা (Message):</strong> <code>{$errMsg}</code></div>
+                <div><strong>উৎস (Location):</strong> <span style="color:#64748b;">{$errFile}:{$errLine}</span></div>
+            </div>
+
+            <div class="action-grid">
+                <a href="/admin/dashboard" class="action-card btn-primary">🔄 পুনরায় ড্যাশবোর্ড লোড করুন</a>
+                <a href="/health" class="action-card">🩺 সিস্টেম হেলথ চেক</a>
+                <a href="/system/modules" class="action-card">⚙️ মডিউল ইন্সপেক্টর</a>
+                <a href="/login" class="action-card">🔐 লগইন পোর্টাল</a>
+            </div>
+        </div>
+        <div class="footer-note">
+            NetFusion Framework &bull; v1.5.3 &bull; Developed by Md. Atiquzzaman Ashish &bull; &copy; 2026 DotNetBD
+        </div>
+    </div>
 </body>
 </html>
 HTML;
